@@ -1,0 +1,69 @@
+版本号：v6.7.7
+后台版本：V6.7.7
+注意：请各终端厂商根据自身情况进行开发。
+
+变更说明：
+
+1、新增接口：投资者新型组合保证金开关查询。
+
+（1）查询请求
+	
+	///投资者新型组合保证金开关查询
+	virtual int ReqQryInvestorPortfSetting(CThostFtdcQryInvestorPortfSettingField *pQryInvestorPortfSetting, int nRequestID) = 0;
+
+（2）查询响应
+	///投资者新型组合保证金开关查询响应
+	virtual void OnRspQryInvestorPortfSetting(CThostFtdcInvestorPortfSettingField *pInvestorPortfSetting, CThostFtdcRspInfoField *pRspInfo, int nRequestID, bool bIsLast) {};
+ 
+
+2、新增接口：获取已连接的前置的信息。
+
+（1）查询请求
+	///获取已连接得前置的信息
+	virtual void GetFrontInfo(CThostFtdcFrontInfoField* pFrontInfo) =0;
+返回前置地址、查询流控参数、FTD流控参数。连接成功后，可获取正确的前置地址信息，登录成功后，可获取正确的前置查询流控和FTD流控信息。
+
+
+3、查询行情接口ReqQryDepthMarketData 新增入参ProductClass
+    ///查询行情
+struct CThostFtdcQryDepthMarketDataField
+{
+	///保留的无效字段
+	TThostFtdcOldInstrumentIDType	reserve1;
+	///交易所代码
+	TThostFtdcExchangeIDType	ExchangeID;
+	///合约代码
+	TThostFtdcInstrumentIDType	InstrumentID;
+	///产品类型
+	TThostFtdcProductClassType	ProductClass;
+};
+
+
+4、TFtdcInstrumentStatusType合约交易状态类型新增枚举值，与上期所API合约状态保持一致。
+
+///交易业务处理
+#define THOST_FTDC_IS_TransactionProcessing '7'
+
+
+5、OnRspOrderInsert报单录入请求响应和OnRspQuoteInsert报价录入请求响应ErrorMsg新增报单欠缺资金。
+
+当报单、报价资金不足时，返回的ErrorMsg中包含了欠缺资金，即：资金不足，约缺少资金[******]
+
+6、下面四个接口新增入参。
+///报单录入请求
+ReqOrderInsert
+
+///报单操作请求
+ReqOrderAction
+
+///报价录入请求
+ReqQuoteInsert
+
+///报价操作请求
+ReqQuoteAction
+
+新增入参如下：
+	///报单回显字段，OrderMemo字段可供终端厂商标记订单使用，CTP不做处理，即终端填写什么CTP就返回什么
+	TThostFtdcOrderMemoType	OrderMemo;
+	///session上请求计数 api自动维护
+	TThostFtdcSequenceNo12Type	SessionReqSeq;
