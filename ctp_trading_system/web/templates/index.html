@@ -357,6 +357,55 @@
                                     <i class="bi bi-save"></i> 保存阈值设置
                                 </button>
 
+                                <!-- 预警方式配置 (评估表要求) -->
+                                <div class="card mb-3 mt-3">
+                                    <div class="card-header bg-light">
+                                        预警方式配置 <span class="badge bg-warning">弹窗/声音/短信/邮件</span>
+                                    </div>
+                                    <div class="card-body">
+                                        <p class="text-muted small">评估表要求：达到阈值时能通过弹窗提示、声音提示、短信、邮件中的一种或多种进行警示</p>
+                                        <div class="row" id="alert-methods">
+                                            <div class="col-md-3">
+                                                <div class="form-check">
+                                                    <input class="form-check-input" type="checkbox" id="alert-method-popup" checked>
+                                                    <label class="form-check-label" for="alert-method-popup">
+                                                        <i class="bi bi-window"></i> 弹窗提示
+                                                    </label>
+                                                </div>
+                                            </div>
+                                            <div class="col-md-3">
+                                                <div class="form-check">
+                                                    <input class="form-check-input" type="checkbox" id="alert-method-sound" checked>
+                                                    <label class="form-check-label" for="alert-method-sound">
+                                                        <i class="bi bi-volume-up"></i> 声音提示
+                                                    </label>
+                                                </div>
+                                            </div>
+                                            <div class="col-md-3">
+                                                <div class="form-check">
+                                                    <input class="form-check-input" type="checkbox" id="alert-method-sms">
+                                                    <label class="form-check-label" for="alert-method-sms">
+                                                        <i class="bi bi-phone"></i> 短信通知
+                                                    </label>
+                                                </div>
+                                            </div>
+                                            <div class="col-md-3">
+                                                <div class="form-check">
+                                                    <input class="form-check-input" type="checkbox" id="alert-method-email">
+                                                    <label class="form-check-label" for="alert-method-email">
+                                                        <i class="bi bi-envelope"></i> 邮件通知
+                                                    </label>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="mt-2">
+                                            <small class="text-success"><i class="bi bi-check-circle"></i> 当前已启用预警方式:
+                                                <span id="alert-methods-enabled">弹窗、声音</span>
+                                            </small>
+                                        </div>
+                                    </div>
+                                </div>
+
                                 <!-- 预警历史 -->
                                 <h6 class="mt-4">预警历史</h6>
                                 <div class="table-responsive">
@@ -557,17 +606,19 @@
                                     <div class="col-md-3">
                                         <label class="form-label">日志类型</label>
                                         <select class="form-select" id="select-log-type">
-                                            <option value="">全部</option>
+                                            <option value="ALL">全部</option>
                                             <option value="TRADE">交易日志</option>
                                             <option value="SYSTEM">系统日志</option>
                                             <option value="MONITOR">监测日志</option>
+                                            <option value="ALERT">预警日志</option>
                                             <option value="ERROR">错误日志</option>
                                         </select>
                                     </div>
                                     <div class="col-md-3">
                                         <label class="form-label">日志级别</label>
                                         <select class="form-select" id="select-log-level">
-                                            <option value="">全部</option>
+                                            <option value="ALL">全部</option>
+                                            <option value="DEBUG">调试</option>
                                             <option value="INFO">信息</option>
                                             <option value="WARNING">警告</option>
                                             <option value="ERROR">错误</option>
