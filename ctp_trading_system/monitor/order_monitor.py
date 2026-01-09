@@ -13,7 +13,7 @@ from datetime import datetime, date
 from collections import defaultdict
 import threading
 
-from ..logging.trade_logger import get_logger, TradeLogger
+from ..trade_logging.trade_logger import get_logger, TradeLogger
 
 
 @dataclass

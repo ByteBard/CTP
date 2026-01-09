@@ -1,0 +1,694 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CTP程序化交易系统 - 功能测试平台</title>
+    <!-- Bootstrap 5 CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Bootstrap Icons -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
+    <!-- Custom CSS -->
+    <link href="/static/css/style.css" rel="stylesheet">
+</head>
+<body>
+    <!-- 顶部导航 -->
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="#">
+                <i class="bi bi-graph-up-arrow"></i> CTP程序化交易系统
+            </a>
+            <div class="navbar-text">
+                <span id="system-status" class="badge bg-secondary">
+                    <i class="bi bi-circle-fill"></i> 未连接
+                </span>
+            </div>
+        </div>
+    </nav>
+
+    <!-- 主内容区 -->
+    <div class="container-fluid mt-3">
+        <div class="row">
+            <!-- 左侧：功能标签页 -->
+            <div class="col-lg-8">
+                <!-- 标签导航 -->
+                <ul class="nav nav-tabs" id="mainTabs" role="tablist">
+                    <li class="nav-item">
+                        <button class="nav-link active" id="connection-tab" data-bs-toggle="tab"
+                                data-bs-target="#connection" type="button">
+                            <i class="bi bi-plug"></i> 连接登录
+                        </button>
+                    </li>
+                    <li class="nav-item">
+                        <button class="nav-link" id="trading-tab" data-bs-toggle="tab"
+                                data-bs-target="#trading" type="button">
+                            <i class="bi bi-currency-exchange"></i> 交易操作
+                        </button>
+                    </li>
+                    <li class="nav-item">
+                        <button class="nav-link" id="monitor-tab" data-bs-toggle="tab"
+                                data-bs-target="#monitor" type="button">
+                            <i class="bi bi-display"></i> 监测面板
+                        </button>
+                    </li>
+                    <li class="nav-item">
+                        <button class="nav-link" id="threshold-tab" data-bs-toggle="tab"
+                                data-bs-target="#threshold" type="button">
+                            <i class="bi bi-sliders"></i> 阈值设置
+                        </button>
+                    </li>
+                    <li class="nav-item">
+                        <button class="nav-link" id="validation-tab" data-bs-toggle="tab"
+                                data-bs-target="#validation" type="button">
+                            <i class="bi bi-shield-check"></i> 错误防范测试
+                        </button>
+                    </li>
+                    <li class="nav-item">
+                        <button class="nav-link" id="emergency-tab" data-bs-toggle="tab"
+                                data-bs-target="#emergency" type="button">
+                            <i class="bi bi-exclamation-triangle"></i> 应急处置
+                        </button>
+                    </li>
+                    <li class="nav-item">
+                        <button class="nav-link" id="logs-tab" data-bs-toggle="tab"
+                                data-bs-target="#logs" type="button">
+                            <i class="bi bi-journal-text"></i> 日志查看
+                        </button>
+                    </li>
+                </ul>
+
+                <!-- 标签内容 -->
+                <div class="tab-content" id="mainTabContent">
+                    <!-- ==================== 连接登录页 (第1项) ==================== -->
+                    <div class="tab-pane fade show active" id="connection" role="tabpanel">
+                        <div class="card mt-3">
+                            <div class="card-header">
+                                <i class="bi bi-plug"></i> 连接登录
+                                <span class="badge bg-info float-end">评估表第1项</span>
+                            </div>
+                            <div class="card-body">
+                                <form id="connection-form">
+                                    <div class="row mb-3">
+                                        <div class="col-md-6">
+                                            <label class="form-label">经纪商ID</label>
+                                            <input type="text" class="form-control" id="input-broker-id" value="9999">
+                                        </div>
+                                        <div class="col-md-6">
+                                            <label class="form-label">交易前置</label>
+                                            <input type="text" class="form-control" id="input-trade-front"
+                                                   value="tcp://180.168.146.187:10201">
+                                        </div>
+                                    </div>
+                                    <div class="row mb-3">
+                                        <div class="col-md-6">
+                                            <label class="form-label">投资者账号</label>
+                                            <input type="text" class="form-control" id="input-investor-id" placeholder="请输入账号">
+                                        </div>
+                                        <div class="col-md-6">
+                                            <label class="form-label">密码</label>
+                                            <input type="password" class="form-control" id="input-password" placeholder="请输入密码">
+                                        </div>
+                                    </div>
+                                    <div class="btn-group mb-3">
+                                        <button type="button" class="btn btn-primary" id="btn-connect">
+                                            <i class="bi bi-plug"></i> 连接服务器
+                                        </button>
+                                        <button type="button" class="btn btn-info" id="btn-authenticate" disabled>
+                                            <i class="bi bi-key"></i> 客户端认证
+                                        </button>
+                                        <button type="button" class="btn btn-success" id="btn-login" disabled>
+                                            <i class="bi bi-box-arrow-in-right"></i> 用户登录
+                                        </button>
+                                    </div>
+                                </form>
+
+                                <!-- 连接状态显示 -->
+                                <div class="card bg-light">
+                                    <div class="card-body">
+                                        <h6>连接状态</h6>
+                                        <div class="row">
+                                            <div class="col-4">
+                                                <span class="status-indicator" id="status-indicator-connection"></span>
+                                                服务器连接: <span id="status-connection">未连接</span>
+                                            </div>
+                                            <div class="col-4">
+                                                <span class="status-indicator" id="status-indicator-auth"></span>
+                                                客户端认证: <span id="status-auth">未认证</span>
+                                            </div>
+                                            <div class="col-4">
+                                                <span class="status-indicator" id="status-indicator-login"></span>
+                                                用户登录: <span id="status-login">未登录</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- ==================== 交易操作页 (第2-4项) ==================== -->
+                    <div class="tab-pane fade" id="trading" role="tabpanel">
+                        <div class="card mt-3">
+                            <div class="card-header">
+                                <i class="bi bi-currency-exchange"></i> 交易操作
+                                <span class="badge bg-info float-end">评估表第2-4项</span>
+                            </div>
+                            <div class="card-body">
+                                <form id="trading-form">
+                                    <div class="row mb-3">
+                                        <div class="col-md-4">
+                                            <label class="form-label">合约代码</label>
+                                            <input type="text" class="form-control" id="input-instrument" placeholder="如 IF2401">
+                                        </div>
+                                        <div class="col-md-4">
+                                            <label class="form-label">价格</label>
+                                            <input type="number" step="0.01" class="form-control" id="input-price" placeholder="0.00">
+                                        </div>
+                                        <div class="col-md-4">
+                                            <label class="form-label">数量</label>
+                                            <input type="number" class="form-control" id="input-volume" value="1" min="1">
+                                        </div>
+                                    </div>
+                                    <div class="row mb-3">
+                                        <div class="col-md-6">
+                                            <div class="btn-group w-100">
+                                                <button type="button" class="btn btn-danger" id="btn-buy-open">
+                                                    <i class="bi bi-arrow-up-circle"></i> 买入开仓
+                                                </button>
+                                                <button type="button" class="btn btn-success" id="btn-sell-open">
+                                                    <i class="bi bi-arrow-down-circle"></i> 卖出开仓
+                                                </button>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <div class="btn-group w-100">
+                                                <button type="button" class="btn btn-outline-danger" id="btn-buy-close">
+                                                    <i class="bi bi-x-circle"></i> 买入平仓
+                                                </button>
+                                                <button type="button" class="btn btn-outline-success" id="btn-sell-close">
+                                                    <i class="bi bi-x-circle"></i> 卖出平仓
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </form>
+
+                                <!-- 当前委托 -->
+                                <h6 class="mt-4">当前委托</h6>
+                                <div class="table-responsive">
+                                    <table class="table table-striped table-sm" id="table-orders">
+                                        <thead>
+                                            <tr>
+                                                <th>委托号</th>
+                                                <th>合约</th>
+                                                <th>方向</th>
+                                                <th>开平</th>
+                                                <th>价格</th>
+                                                <th>数量</th>
+                                                <th>状态</th>
+                                                <th>操作</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <!-- 动态填充 -->
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- ==================== 监测面板页 (第5-10项) ==================== -->
+                    <div class="tab-pane fade" id="monitor" role="tabpanel">
+                        <div class="card mt-3">
+                            <div class="card-header">
+                                <i class="bi bi-display"></i> 监测面板
+                                <span class="badge bg-info float-end">评估表第5-10项</span>
+                            </div>
+                            <div class="card-body">
+                                <!-- 连接状态监测 (第5项) -->
+                                <div class="card mb-3">
+                                    <div class="card-header bg-light">
+                                        连接状态监测 <span class="badge bg-secondary">第5项</span>
+                                    </div>
+                                    <div class="card-body">
+                                        <div class="row">
+                                            <div class="col-md-4">
+                                                <strong>状态:</strong>
+                                                <span id="monitor-connection-status" class="badge bg-secondary">未知</span>
+                                            </div>
+                                            <div class="col-md-4">
+                                                <strong>心跳时间:</strong>
+                                                <span id="monitor-heartbeat">--</span>
+                                            </div>
+                                            <div class="col-md-4">
+                                                <strong>断线次数:</strong>
+                                                <span id="monitor-disconnect-count">0</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- 报单监测 (第6-8项) -->
+                                <div class="card mb-3">
+                                    <div class="card-header bg-light">
+                                        报单监测 <span class="badge bg-secondary">第6-8项</span>
+                                    </div>
+                                    <div class="card-body">
+                                        <div class="table-responsive">
+                                            <table class="table table-sm" id="table-instrument-stats">
+                                                <thead>
+                                                    <tr>
+                                                        <th>合约</th>
+                                                        <th>开仓次数 <span class="badge bg-info">第6项</span></th>
+                                                        <th>平仓次数 <span class="badge bg-info">第7项</span></th>
+                                                        <th>撤单次数 <span class="badge bg-info">第8项</span></th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    <!-- 动态填充 -->
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- 账号统计 (第9-10项) -->
+                                <div class="card">
+                                    <div class="card-header bg-light">
+                                        账号统计 <span class="badge bg-secondary">第9-10项</span>
+                                    </div>
+                                    <div class="card-body">
+                                        <div class="row">
+                                            <div class="col-md-6">
+                                                <div class="card text-center">
+                                                    <div class="card-body">
+                                                        <h3 id="monitor-total-orders">0</h3>
+                                                        <p class="text-muted mb-0">今日报单总数 <span class="badge bg-info">第9项</span></p>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div class="col-md-6">
+                                                <div class="card text-center">
+                                                    <div class="card-body">
+                                                        <h3 id="monitor-total-cancels">0</h3>
+                                                        <p class="text-muted mb-0">今日撤单总数 <span class="badge bg-info">第10项</span></p>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- ==================== 阈值设置页 (第11-13项) ==================== -->
+                    <div class="tab-pane fade" id="threshold" role="tabpanel">
+                        <div class="card mt-3">
+                            <div class="card-header">
+                                <i class="bi bi-sliders"></i> 阈值设置
+                                <span class="badge bg-info float-end">评估表第11-13项</span>
+                            </div>
+                            <div class="card-body">
+                                <!-- 重复报单阈值 (第11项) -->
+                                <div class="card mb-3">
+                                    <div class="card-header bg-light">
+                                        重复报单阈值 <span class="badge bg-secondary">第11项</span>
+                                    </div>
+                                    <div class="card-body">
+                                        <div class="row">
+                                            <div class="col-md-4">
+                                                <label class="form-label">单合约开仓次数上限</label>
+                                                <input type="number" class="form-control" id="input-threshold-open" value="10">
+                                            </div>
+                                            <div class="col-md-4">
+                                                <label class="form-label">单合约平仓次数上限</label>
+                                                <input type="number" class="form-control" id="input-threshold-close" value="10">
+                                            </div>
+                                            <div class="col-md-4">
+                                                <label class="form-label">单合约撤单次数上限</label>
+                                                <input type="number" class="form-control" id="input-threshold-cancel" value="10">
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- 总量阈值 (第12-13项) -->
+                                <div class="card mb-3">
+                                    <div class="card-header bg-light">
+                                        总量阈值 <span class="badge bg-secondary">第12-13项</span>
+                                    </div>
+                                    <div class="card-body">
+                                        <div class="row">
+                                            <div class="col-md-6">
+                                                <label class="form-label">报单总数上限 <span class="badge bg-info">第12项</span></label>
+                                                <input type="number" class="form-control" id="input-threshold-total-order" value="500">
+                                            </div>
+                                            <div class="col-md-6">
+                                                <label class="form-label">撤单总数上限 <span class="badge bg-info">第13项</span></label>
+                                                <input type="number" class="form-control" id="input-threshold-total-cancel" value="400">
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <button type="button" class="btn btn-primary" id="btn-save-thresholds">
+                                    <i class="bi bi-save"></i> 保存阈值设置
+                                </button>
+
+                                <!-- 预警历史 -->
+                                <h6 class="mt-4">预警历史</h6>
+                                <div class="table-responsive">
+                                    <table class="table table-sm" id="table-alerts">
+                                        <thead>
+                                            <tr>
+                                                <th>时间</th>
+                                                <th>级别</th>
+                                                <th>类型</th>
+                                                <th>消息</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <!-- 动态填充 -->
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- ==================== 错误防范测试页 (第14-19项) ==================== -->
+                    <div class="tab-pane fade" id="validation" role="tabpanel">
+                        <div class="card mt-3">
+                            <div class="card-header">
+                                <i class="bi bi-shield-check"></i> 错误防范测试
+                                <span class="badge bg-info float-end">评估表第14-19项</span>
+                            </div>
+                            <div class="card-body">
+                                <p class="text-muted">点击下方按钮测试各项错误防范功能，验证系统是否正确提示错误信息。</p>
+
+                                <div class="list-group mb-3">
+                                    <div class="list-group-item d-flex justify-content-between align-items-center">
+                                        <div>
+                                            <strong>合约代码错误检查</strong>
+                                            <span class="badge bg-info ms-2">第14项</span>
+                                            <p class="mb-0 text-muted small">测试输入无效合约代码时的错误提示</p>
+                                        </div>
+                                        <div>
+                                            <span id="test-result-14" class="badge bg-secondary me-2">待测试</span>
+                                            <button class="btn btn-sm btn-outline-primary" id="btn-test-invalid-instrument">测试</button>
+                                        </div>
+                                    </div>
+                                    <div class="list-group-item d-flex justify-content-between align-items-center">
+                                        <div>
+                                            <strong>价格最小变动检查</strong>
+                                            <span class="badge bg-info ms-2">第15项</span>
+                                            <p class="mb-0 text-muted small">测试价格不符合最小变动单位时的错误提示</p>
+                                        </div>
+                                        <div>
+                                            <span id="test-result-15" class="badge bg-secondary me-2">待测试</span>
+                                            <button class="btn btn-sm btn-outline-primary" id="btn-test-invalid-price">测试</button>
+                                        </div>
+                                    </div>
+                                    <div class="list-group-item d-flex justify-content-between align-items-center">
+                                        <div>
+                                            <strong>委托数量检查</strong>
+                                            <span class="badge bg-info ms-2">第16项</span>
+                                            <p class="mb-0 text-muted small">测试委托数量错误时的错误提示</p>
+                                        </div>
+                                        <div>
+                                            <span id="test-result-16" class="badge bg-secondary me-2">待测试</span>
+                                            <button class="btn btn-sm btn-outline-primary" id="btn-test-invalid-volume">测试</button>
+                                        </div>
+                                    </div>
+                                    <div class="list-group-item d-flex justify-content-between align-items-center">
+                                        <div>
+                                            <strong>资金不足提示</strong>
+                                            <span class="badge bg-info ms-2">第17项</span>
+                                            <p class="mb-0 text-muted small">测试资金不足时的错误提示</p>
+                                        </div>
+                                        <div>
+                                            <span id="test-result-17" class="badge bg-secondary me-2">待测试</span>
+                                            <button class="btn btn-sm btn-outline-primary" id="btn-test-insufficient-margin">测试</button>
+                                        </div>
+                                    </div>
+                                    <div class="list-group-item d-flex justify-content-between align-items-center">
+                                        <div>
+                                            <strong>持仓不足提示</strong>
+                                            <span class="badge bg-info ms-2">第18项</span>
+                                            <p class="mb-0 text-muted small">测试持仓不足时的错误提示</p>
+                                        </div>
+                                        <div>
+                                            <span id="test-result-18" class="badge bg-secondary me-2">待测试</span>
+                                            <button class="btn btn-sm btn-outline-primary" id="btn-test-insufficient-pos">测试</button>
+                                        </div>
+                                    </div>
+                                    <div class="list-group-item d-flex justify-content-between align-items-center">
+                                        <div>
+                                            <strong>非交易时间提示</strong>
+                                            <span class="badge bg-info ms-2">第19项</span>
+                                            <p class="mb-0 text-muted small">测试非交易时间的错误提示</p>
+                                        </div>
+                                        <div>
+                                            <span id="test-result-19" class="badge bg-secondary me-2">待测试</span>
+                                            <button class="btn btn-sm btn-outline-primary" id="btn-test-non-trading-time">测试</button>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- 错误提示显示区 -->
+                                <div class="card bg-light">
+                                    <div class="card-header">错误提示信息</div>
+                                    <div class="card-body">
+                                        <div id="error-message" class="text-danger">
+                                            点击上方测试按钮查看错误提示...
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- ==================== 应急处置页 (第20, 23-24项) ==================== -->
+                    <div class="tab-pane fade" id="emergency" role="tabpanel">
+                        <div class="card mt-3">
+                            <div class="card-header">
+                                <i class="bi bi-exclamation-triangle"></i> 应急处置
+                                <span class="badge bg-info float-end">评估表第20, 23-24项</span>
+                            </div>
+                            <div class="card-body">
+                                <!-- 暂停交易 (第20项) -->
+                                <div class="card mb-3">
+                                    <div class="card-header bg-light">
+                                        暂停交易功能 <span class="badge bg-danger">第20项 - 严重</span>
+                                    </div>
+                                    <div class="card-body">
+                                        <div class="row align-items-center">
+                                            <div class="col-md-6">
+                                                <div class="btn-group">
+                                                    <button class="btn btn-warning" id="btn-pause-trading">
+                                                        <i class="bi bi-pause-circle"></i> 暂停交易
+                                                    </button>
+                                                    <button class="btn btn-success" id="btn-resume-trading">
+                                                        <i class="bi bi-play-circle"></i> 恢复交易
+                                                    </button>
+                                                </div>
+                                            </div>
+                                            <div class="col-md-6">
+                                                <strong>当前状态:</strong>
+                                                <span id="status-trading" class="badge bg-success">交易中</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- 批量撤单 (第23-24项) -->
+                                <div class="card mb-3">
+                                    <div class="card-header bg-light">
+                                        批量撤单功能 <span class="badge bg-secondary">第23-24项</span>
+                                    </div>
+                                    <div class="card-body">
+                                        <div class="row mb-3">
+                                            <div class="col-md-6">
+                                                <label class="form-label">按合约撤单 <span class="badge bg-info">第23项</span></label>
+                                                <div class="input-group">
+                                                    <input type="text" class="form-control" id="input-cancel-instrument" placeholder="合约代码">
+                                                    <button class="btn btn-outline-warning" id="btn-cancel-by-instrument">部分撤单</button>
+                                                </div>
+                                            </div>
+                                            <div class="col-md-6">
+                                                <label class="form-label">全部撤单 <span class="badge bg-info">第24项</span></label>
+                                                <div>
+                                                    <button class="btn btn-danger" id="btn-cancel-all">
+                                                        <i class="bi bi-x-circle"></i> 全部撤单
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- 紧急停止 -->
+                                <div class="card border-danger">
+                                    <div class="card-header bg-danger text-white">
+                                        紧急停止
+                                    </div>
+                                    <div class="card-body text-center">
+                                        <p class="text-muted">执行紧急停止将：暂停交易 + 停止策略 + 全部撤单</p>
+                                        <button class="btn btn-lg btn-danger" id="btn-emergency-stop">
+                                            <i class="bi bi-stop-circle"></i> 一键紧急停止
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- ==================== 日志查看页 (第25项) ==================== -->
+                    <div class="tab-pane fade" id="logs" role="tabpanel">
+                        <div class="card mt-3">
+                            <div class="card-header">
+                                <i class="bi bi-journal-text"></i> 日志查看
+                                <span class="badge bg-info float-end">评估表第25项</span>
+                            </div>
+                            <div class="card-body">
+                                <div class="row mb-3">
+                                    <div class="col-md-3">
+                                        <label class="form-label">日志类型</label>
+                                        <select class="form-select" id="select-log-type">
+                                            <option value="">全部</option>
+                                            <option value="TRADE">交易日志</option>
+                                            <option value="SYSTEM">系统日志</option>
+                                            <option value="MONITOR">监测日志</option>
+                                            <option value="ERROR">错误日志</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <label class="form-label">日志级别</label>
+                                        <select class="form-select" id="select-log-level">
+                                            <option value="">全部</option>
+                                            <option value="INFO">信息</option>
+                                            <option value="WARNING">警告</option>
+                                            <option value="ERROR">错误</option>
+                                            <option value="CRITICAL">严重</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-3 d-flex align-items-end">
+                                        <button class="btn btn-primary me-2" id="btn-refresh-logs">
+                                            <i class="bi bi-arrow-clockwise"></i> 刷新
+                                        </button>
+                                        <button class="btn btn-outline-secondary" id="btn-export-logs">
+                                            <i class="bi bi-download"></i> 导出
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <div id="log-container" class="log-container">
+                                    <!-- 日志内容动态填充 -->
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 右侧：实时状态和日志 -->
+            <div class="col-lg-4">
+                <!-- 实时状态卡片 -->
+                <div class="card mb-3">
+                    <div class="card-header bg-dark text-white">
+                        <i class="bi bi-activity"></i> 实时状态
+                    </div>
+                    <div class="card-body">
+                        <div class="row text-center">
+                            <div class="col-6">
+                                <h4 id="rt-total-orders">0</h4>
+                                <small class="text-muted">报单数</small>
+                            </div>
+                            <div class="col-6">
+                                <h4 id="rt-total-cancels">0</h4>
+                                <small class="text-muted">撤单数</small>
+                            </div>
+                        </div>
+                        <hr>
+                        <div class="d-flex justify-content-between">
+                            <span>交易状态</span>
+                            <span id="rt-trading-status" class="badge bg-success">允许交易</span>
+                        </div>
+                        <div class="d-flex justify-content-between mt-2">
+                            <span>阈值状态</span>
+                            <span id="rt-threshold-status" class="badge bg-success">正常</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 实时日志卡片 -->
+                <div class="card">
+                    <div class="card-header bg-dark text-white">
+                        <i class="bi bi-terminal"></i> 实时日志
+                    </div>
+                    <div class="card-body p-0">
+                        <div id="realtime-log" class="realtime-log">
+                            <!-- 实时日志动态填充 -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 预警消息卡片 -->
+                <div class="card mt-3">
+                    <div class="card-header bg-warning">
+                        <i class="bi bi-bell"></i> 预警消息
+                    </div>
+                    <div class="card-body p-0">
+                        <div id="alert-container" class="alert-container">
+                            <!-- 预警消息动态填充 -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 底部状态栏 -->
+    <footer class="footer mt-3 py-2 bg-dark text-white">
+        <div class="container-fluid">
+            <div class="row">
+                <div class="col-md-4">
+                    报单: <span id="footer-orders">0</span> |
+                    撤单: <span id="footer-cancels">0</span>
+                </div>
+                <div class="col-md-4 text-center">
+                    阈值状态: <span id="footer-threshold" class="badge bg-success">正常</span>
+                </div>
+                <div class="col-md-4 text-end">
+                    交易状态: <span id="footer-trading" class="badge bg-success">允许交易</span>
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <!-- 预警弹窗模态框 -->
+    <div class="modal fade" id="alertModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header bg-warning">
+                    <h5 class="modal-title" id="alertModalTitle">预警</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body" id="alertModalBody">
+                    预警消息内容
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bootstrap 5 JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- Custom JS -->
+    <script src="/static/js/main.js"></script>
+</body>
+</html>

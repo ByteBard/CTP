@@ -9,7 +9,7 @@ CTP程序化交易系统
 - validator: 交易指令验证
 - alert: 预警服务
 - emergency: 应急处置
-- logging: 日志系统
+- trade_logging: 日志系统
 - strategy: 策略基类
 
 评估表功能对照：
@@ -20,7 +20,7 @@ CTP程序化交易系统
 - 第11-13项（阈值管理）: monitor.threshold_manager
 - 第14-19项（错误防范）: validator.order_validator
 - 第20, 23-24项（应急处置）: emergency.emergency_handler
-- 第25项（日志记录）: logging.trade_logger
+- 第25项（日志记录）: trade_logging.trade_logger
 """
 
 __version__ = "1.0.0"

@@ -16,7 +16,7 @@ import threading
 import time
 
 from ..core.ctp_gateway import CtpGateway
-from ..logging.trade_logger import get_logger, TradeLogger
+from ..trade_logging.trade_logger import get_logger, TradeLogger
 from ..alert.alert_service import AlertService, AlertLevel
 
 

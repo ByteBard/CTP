@@ -9,7 +9,7 @@ from datetime import datetime
 from ..core.ctp_gateway import CtpGateway, Direction, OffsetFlag
 from ..validator.order_validator import OrderValidator, ValidationResult
 from ..monitor.order_monitor import OrderMonitor
-from ..logging.trade_logger import get_logger, TradeLogger
+from ..trade_logging.trade_logger import get_logger, TradeLogger
 
 
 class BaseStrategy(ABC):

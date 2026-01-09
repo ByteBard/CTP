@@ -17,7 +17,7 @@ from datetime import datetime
 from enum import Enum
 
 from ..config.settings import AlertConfig
-from ..logging.trade_logger import get_logger, TradeLogger
+from ..trade_logging.trade_logger import get_logger, TradeLogger
 
 
 class AlertLevel(Enum):

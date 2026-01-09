@@ -272,12 +272,155 @@ system.stop()
 
 ---
 
+### 2026-01-10
+
+#### 12. Web UI 模块
+- 目录: `web/`
+- 技术栈: FastAPI + Bootstrap 5 + JavaScript
+- 功能:
+  - 连接登录页 (第1项)
+  - 交易操作页 (第2-4项)
+  - 监测面板页 (第5-10项)
+  - 阈值设置页 (第11-13项)
+  - 错误防范测试页 (第14-19项)
+  - 应急处置页 (第20, 23-24项)
+  - 日志查看页 (第25项)
+- 特性:
+  - WebSocket实时推送
+  - 响应式设计
+  - 标准化元素ID (便于Playwright测试)
+
+#### 13. API接口
+- 文件: `web/api/`
+  - `connection.py`: 连接管理API
+  - `trading.py`: 交易操作API
+  - `monitor.py`: 监测面板API
+  - `emergency.py`: 应急处置API
+  - `logs.py`: 日志管理API
+- 特性:
+  - RESTful设计
+  - Pydantic数据验证
+  - 自动API文档 (FastAPI)
+
+#### 14. Playwright自动化测试
+- 目录: `tests/`
+- 文件:
+  - `conftest.py`: Pytest配置和Fixtures
+  - `test_assessment.py`: 评估表测试用例
+  - `report_generator.py`: 测试报告生成器
+  - `run_tests.py`: 测试运行脚本
+- 测试用例:
+  - 第1项: 接口适应性测试 (3个用例)
+  - 第2-4项: 基础交易功能测试 (3个用例)
+  - 第5-10项: 异常监测测试 (6个用例)
+  - 第11-13项: 阈值管理测试 (3个用例)
+  - 第14-19项: 错误防范测试 (6个用例)
+  - 第20, 23-24项: 应急处置测试 (3个用例)
+  - 第25项: 日志记录测试 (1个用例)
+- 报告格式: TXT, JSON, HTML
+
+---
+
+## 更新后项目结构
+
+```
+ctp_trading_system/
+├── __init__.py
+├── main.py
+├── requirements.txt
+├── IMPLEMENTATION_LOG.md
+│
+├── config/
+│   └── settings.py
+│
+├── core/
+│   └── ctp_gateway.py
+│
+├── monitor/
+│   ├── connection_monitor.py
+│   ├── order_monitor.py
+│   └── threshold_manager.py
+│
+├── validator/
+│   └── order_validator.py
+│
+├── alert/
+│   └── alert_service.py
+│
+├── emergency/
+│   └── emergency_handler.py
+│
+├── logging/
+│   └── trade_logger.py
+│
+├── strategy/
+│   └── base_strategy.py
+│
+├── web/                          # 新增: Web UI模块
+│   ├── __init__.py
+│   ├── app.py                    # FastAPI应用
+│   ├── websocket.py              # WebSocket实时推送
+│   ├── api/
+│   │   ├── __init__.py
+│   │   ├── connection.py
+│   │   ├── trading.py
+│   │   ├── monitor.py
+│   │   ├── emergency.py
+│   │   └── logs.py
+│   ├── static/
+│   │   ├── css/style.css
+│   │   └── js/main.js
+│   └── templates/
+│       └── index.html
+│
+├── tests/                        # 新增: 自动化测试
+│   ├── __init__.py
+│   ├── conftest.py
+│   ├── pytest.ini
+│   ├── test_assessment.py
+│   ├── report_generator.py
+│   └── run_tests.py
+│
+└── docs/
+    └── WEB_UI_DESIGN.md
+```
+
+---
+
+## 使用说明
+
+### 启动Web UI
+```bash
+# 方式1: 直接运行
+python -m ctp_trading_system.web.app
+
+# 方式2: 使用uvicorn
+uvicorn ctp_trading_system.web.app:app --host 0.0.0.0 --port 8000 --reload
+```
+
+### 运行自动化测试
+```bash
+# 安装测试依赖
+pip install pytest pytest-asyncio playwright
+playwright install chromium
+
+# 运行测试
+python -m ctp_trading_system.tests.run_tests
+
+# 带界面运行
+python -m ctp_trading_system.tests.run_tests --headed
+
+# 慢速模式（便于观察）
+python -m ctp_trading_system.tests.run_tests --headed --slow 500
+```
+
+---
+
 ## 待优化项
 
 1. **行情接口**: 当前仅实现交易接口，行情接口可后续添加
 2. **持久化**: 可添加数据库支持，保存历史数据
-3. **Web界面**: 可添加Web管理界面
-4. **更多预警方式**: 可添加微信、钉钉等通知渠道
+3. **更多预警方式**: 可添加微信、钉钉等通知渠道
 
 ---
 
@@ -286,3 +429,4 @@ system.stop()
 | 版本 | 日期 | 说明 |
 |------|------|------|
 | 1.0.0 | 2026-01-09 | 初始版本，完成所有评估表功能 |
+| 1.1.0 | 2026-01-10 | 新增Web UI和Playwright自动化测试 |

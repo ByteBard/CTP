@@ -14,7 +14,7 @@ from datetime import datetime, time
 from enum import Enum
 
 from ..config.settings import Settings
-from ..logging.trade_logger import get_logger, TradeLogger
+from ..trade_logging.trade_logger import get_logger, TradeLogger
 
 
 class ValidationErrorType(Enum):

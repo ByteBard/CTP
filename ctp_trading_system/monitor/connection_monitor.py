@@ -10,7 +10,7 @@ from typing import Optional, Callable, List
 from dataclasses import dataclass
 from datetime import datetime
 
-from ..logging.trade_logger import get_logger, TradeLogger
+from ..trade_logging.trade_logger import get_logger, TradeLogger
 from ..core.ctp_gateway import CtpGateway
 
 

@@ -12,7 +12,7 @@ from enum import Enum
 import threading
 
 from ..config.settings import ThresholdConfig
-from ..logging.trade_logger import get_logger, TradeLogger
+from ..trade_logging.trade_logger import get_logger, TradeLogger
 from .order_monitor import OrderMonitor
 
 

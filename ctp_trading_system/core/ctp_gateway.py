@@ -25,7 +25,7 @@ except ImportError:
         mdapi = None
 
 from ..config.settings import Settings, ConnectionConfig
-from ..logging.trade_logger import get_logger, TradeLogger
+from ..trade_logging.trade_logger import get_logger, TradeLogger
 
 
 class Direction(Enum):

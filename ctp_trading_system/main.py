@@ -22,7 +22,7 @@ from typing import Optional
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from ctp_trading_system.config.settings import Settings, ConnectionConfig, ThresholdConfig, AlertConfig
-from ctp_trading_system.logging.trade_logger import init_logger, get_logger
+from ctp_trading_system.trade_logging.trade_logger import init_logger, get_logger
 from ctp_trading_system.core.ctp_gateway import CtpGateway, Direction
 from ctp_trading_system.monitor.connection_monitor import ConnectionMonitor, ConnectionState
 from ctp_trading_system.monitor.order_monitor import OrderMonitor

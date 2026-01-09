@@ -1,0 +1,572 @@
+/**
+ * CTP程序化交易系统 - 前端JavaScript
+ */
+
+// ==================== 全局状态 ====================
+const AppState = {
+    connected: false,
+    authenticated: false,
+    loggedIn: false,
+    tradingPaused: false,
+    ws: null
+};
+
+// ==================== API调用封装 ====================
+const API = {
+    baseUrl: '/api',
+
+    async request(method, endpoint, data = null) {
+        const options = {
+            method: method,
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        };
+        if (data) {
+            options.body = JSON.stringify(data);
+        }
+
+        try {
+            const response = await fetch(this.baseUrl + endpoint, options);
+            return await response.json();
+        } catch (error) {
+            console.error('API Error:', error);
+            throw error;
+        }
+    },
+
+    // 连接管理
+    connect: (data) => API.request('POST', '/connection/connect', data),
+    authenticate: (data) => API.request('POST', '/connection/authenticate', data),
+    login: (data) => API.request('POST', '/connection/login', data),
+    getConnectionStatus: () => API.request('GET', '/connection/status'),
+
+    // 交易操作
+    openPosition: (data) => API.request('POST', '/trading/open', data),
+    closePosition: (data) => API.request('POST', '/trading/close', data),
+    cancelOrder: (data) => API.request('POST', '/trading/cancel', data),
+    validateOrder: (data) => API.request('POST', '/trading/validate', data),
+    getOrders: () => API.request('GET', '/trading/orders'),
+
+    // 监测
+    getConnectionMonitor: () => API.request('GET', '/monitor/connection'),
+    getOrderStats: () => API.request('GET', '/monitor/orders'),
+    getThresholds: () => API.request('GET', '/monitor/thresholds'),
+    updateThresholds: (data) => API.request('PUT', '/monitor/thresholds', data),
+    getAlerts: () => API.request('GET', '/monitor/alerts'),
+
+    // 应急处置
+    pauseTrading: (data) => API.request('POST', '/emergency/pause', data),
+    resumeTrading: (data) => API.request('POST', '/emergency/resume', data),
+    cancelByInstrument: (data) => API.request('POST', '/emergency/cancel-by-instrument', data),
+    cancelAll: (data) => API.request('POST', '/emergency/cancel-all', data),
+    emergencyStop: (data) => API.request('POST', '/emergency/stop', data),
+    getEmergencyStatus: () => API.request('GET', '/emergency/status'),
+
+    // 日志
+    getLogs: (params) => API.request('GET', '/logs/?' + new URLSearchParams(params)),
+    getRealtimeLogs: () => API.request('GET', '/logs/realtime')
+};
+
+// ==================== WebSocket管理 ====================
+const WebSocketManager = {
+    connect() {
+        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const wsUrl = `${protocol}//${window.location.host}/ws/realtime`;
+
+        this.ws = new WebSocket(wsUrl);
+        AppState.ws = this.ws;
+
+        this.ws.onopen = () => {
+            console.log('WebSocket connected');
+            this.addRealtimeLog('SYSTEM', 'INFO', 'WebSocket连接成功');
+        };
+
+        this.ws.onmessage = (event) => {
+            const data = JSON.parse(event.data);
+            this.handleMessage(data);
+        };
+
+        this.ws.onclose = () => {
+            console.log('WebSocket disconnected');
+            // 尝试重连
+            setTimeout(() => this.connect(), 3000);
+        };
+
+        this.ws.onerror = (error) => {
+            console.error('WebSocket error:', error);
+        };
+
+        // 心跳
+        setInterval(() => {
+            if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+                this.ws.send(JSON.stringify({ type: 'ping' }));
+            }
+        }, 30000);
+    },
+
+    handleMessage(data) {
+        switch (data.type) {
+            case 'log':
+                this.addRealtimeLog(data.log_type, data.level, data.message);
+                break;
+            case 'alert':
+                this.showAlert(data.level, data.title, data.message);
+                break;
+            case 'status':
+                this.handleStatusUpdate(data);
+                break;
+            case 'order':
+                this.handleOrderUpdate(data.order);
+                break;
+        }
+    },
+
+    addRealtimeLog(type, level, message) {
+        const container = document.getElementById('realtime-log');
+        const line = document.createElement('div');
+        line.className = 'log-line';
+
+        const time = new Date().toLocaleTimeString();
+        line.innerHTML = `<span class="timestamp">${time}</span> [<span class="level-${level}">${level}</span>] ${message}`;
+
+        container.insertBefore(line, container.firstChild);
+
+        // 限制日志数量
+        while (container.children.length > 100) {
+            container.removeChild(container.lastChild);
+        }
+    },
+
+    showAlert(level, title, message) {
+        // 添加到预警容器
+        const container = document.getElementById('alert-container');
+        const item = document.createElement('div');
+        item.className = `alert-item ${level.toLowerCase()}`;
+        item.innerHTML = `
+            <div class="d-flex justify-content-between">
+                <strong>${title}</strong>
+                <span class="alert-time">${new Date().toLocaleTimeString()}</span>
+            </div>
+            <div>${message}</div>
+        `;
+        container.insertBefore(item, container.firstChild);
+
+        // 显示弹窗
+        if (level === 'CRITICAL' || level === 'WARNING') {
+            document.getElementById('alertModalTitle').textContent = title;
+            document.getElementById('alertModalBody').textContent = message;
+            new bootstrap.Modal(document.getElementById('alertModal')).show();
+        }
+    },
+
+    handleStatusUpdate(data) {
+        if (data.status_type === 'connection') {
+            updateConnectionUI(data.data.status);
+        } else if (data.status_type === 'trading') {
+            AppState.tradingPaused = data.data.paused;
+            updateTradingStatusUI();
+        }
+    },
+
+    handleOrderUpdate(order) {
+        refreshOrders();
+    }
+};
+
+// ==================== UI更新函数 ====================
+function updateConnectionUI(status) {
+    const statusMap = {
+        'connected': { text: '已连接', class: 'connected' },
+        'authenticated': { text: '已认证', class: 'connected' },
+        'logged_in': { text: '已登录', class: 'connected' },
+        'disconnected': { text: '未连接', class: 'disconnected' }
+    };
+
+    if (status === 'connected') {
+        AppState.connected = true;
+        document.getElementById('status-connection').textContent = '已连接';
+        document.getElementById('status-indicator-connection').className = 'status-indicator connected';
+        document.getElementById('btn-authenticate').disabled = false;
+    } else if (status === 'authenticated') {
+        AppState.authenticated = true;
+        document.getElementById('status-auth').textContent = '已认证';
+        document.getElementById('status-indicator-auth').className = 'status-indicator connected';
+        document.getElementById('btn-login').disabled = false;
+    } else if (status === 'logged_in') {
+        AppState.loggedIn = true;
+        document.getElementById('status-login').textContent = '已登录';
+        document.getElementById('status-indicator-login').className = 'status-indicator connected';
+        document.getElementById('system-status').innerHTML = '<i class="bi bi-circle-fill text-success"></i> 已连接';
+        document.getElementById('system-status').className = 'badge bg-success';
+    }
+}
+
+function updateTradingStatusUI() {
+    const paused = AppState.tradingPaused;
+    const elements = ['status-trading', 'rt-trading-status', 'footer-trading'];
+
+    elements.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) {
+            if (paused) {
+                el.textContent = '已暂停';
+                el.className = 'badge bg-warning';
+            } else {
+                el.textContent = '交易中';
+                el.className = 'badge bg-success';
+            }
+        }
+    });
+}
+
+function updateMonitorStats(stats) {
+    document.getElementById('monitor-total-orders').textContent = stats.total_orders || 0;
+    document.getElementById('monitor-total-cancels').textContent = stats.total_cancels || 0;
+    document.getElementById('rt-total-orders').textContent = stats.total_orders || 0;
+    document.getElementById('rt-total-cancels').textContent = stats.total_cancels || 0;
+    document.getElementById('footer-orders').textContent = stats.total_orders || 0;
+    document.getElementById('footer-cancels').textContent = stats.total_cancels || 0;
+
+    // 更新合约统计表格
+    const tbody = document.querySelector('#table-instrument-stats tbody');
+    tbody.innerHTML = '';
+    if (stats.by_instrument) {
+        stats.by_instrument.forEach(item => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td>${item.instrument_id}</td>
+                <td id="monitor-open-count-${item.instrument_id}">${item.open_count}</td>
+                <td id="monitor-close-count-${item.instrument_id}">${item.close_count}</td>
+                <td id="monitor-cancel-count-${item.instrument_id}">${item.cancel_count}</td>
+            `;
+            tbody.appendChild(tr);
+        });
+    }
+}
+
+async function refreshOrders() {
+    try {
+        const result = await API.getOrders();
+        const tbody = document.querySelector('#table-orders tbody');
+        tbody.innerHTML = '';
+
+        if (result.orders) {
+            result.orders.forEach(order => {
+                const tr = document.createElement('tr');
+                tr.id = `order-row-${order.order_ref}`;
+                tr.innerHTML = `
+                    <td>${order.order_ref}</td>
+                    <td>${order.instrument_id}</td>
+                    <td>${order.direction === 'buy' ? '买' : '卖'}</td>
+                    <td>${order.offset === 'open' ? '开' : '平'}</td>
+                    <td>${order.price}</td>
+                    <td>${order.volume}</td>
+                    <td class="order-status-${order.status}">${getOrderStatusText(order.status)}</td>
+                    <td>
+                        ${order.status === 'not_traded' || order.status === 'part_traded' ?
+                        `<button class="btn btn-sm btn-outline-danger btn-cancel-order"
+                                 data-instrument="${order.instrument_id}"
+                                 data-ref="${order.order_ref}">撤单</button>` : ''}
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+
+            // 绑定撤单按钮事件
+            document.querySelectorAll('.btn-cancel-order').forEach(btn => {
+                btn.addEventListener('click', async () => {
+                    const instrument = btn.dataset.instrument;
+                    const ref = btn.dataset.ref;
+                    await API.cancelOrder({ instrument_id: instrument, order_ref: ref });
+                });
+            });
+        }
+    } catch (error) {
+        console.error('Error refreshing orders:', error);
+    }
+}
+
+function getOrderStatusText(status) {
+    const statusMap = {
+        'submitted': '已提交',
+        'not_traded': '未成交',
+        'part_traded': '部分成交',
+        'all_traded': '全部成交',
+        'canceled': '已撤销',
+        'cancelling': '撤单中'
+    };
+    return statusMap[status] || status;
+}
+
+// ==================== 事件绑定 ====================
+document.addEventListener('DOMContentLoaded', function() {
+    // 初始化WebSocket
+    WebSocketManager.connect();
+
+    // ===== 连接登录 =====
+    document.getElementById('btn-connect').addEventListener('click', async () => {
+        const result = await API.connect({
+            broker_id: document.getElementById('input-broker-id').value,
+            trade_front: document.getElementById('input-trade-front').value
+        });
+        if (result.success) {
+            updateConnectionUI('connected');
+        } else {
+            alert('连接失败: ' + result.message);
+        }
+    });
+
+    document.getElementById('btn-authenticate').addEventListener('click', async () => {
+        const result = await API.authenticate({});
+        if (result.success) {
+            updateConnectionUI('authenticated');
+        } else {
+            alert('认证失败: ' + result.message);
+        }
+    });
+
+    document.getElementById('btn-login').addEventListener('click', async () => {
+        const result = await API.login({
+            investor_id: document.getElementById('input-investor-id').value,
+            password: document.getElementById('input-password').value
+        });
+        if (result.success) {
+            updateConnectionUI('logged_in');
+        } else {
+            alert('登录失败: ' + result.message);
+        }
+    });
+
+    // ===== 交易操作 =====
+    document.getElementById('btn-buy-open').addEventListener('click', async () => {
+        const result = await API.openPosition({
+            instrument_id: document.getElementById('input-instrument').value,
+            price: parseFloat(document.getElementById('input-price').value),
+            volume: parseInt(document.getElementById('input-volume').value),
+            direction: 'buy',
+            offset: 'open'
+        });
+        if (!result.success) {
+            alert(result.message);
+        }
+        refreshOrders();
+    });
+
+    document.getElementById('btn-sell-open').addEventListener('click', async () => {
+        const result = await API.openPosition({
+            instrument_id: document.getElementById('input-instrument').value,
+            price: parseFloat(document.getElementById('input-price').value),
+            volume: parseInt(document.getElementById('input-volume').value),
+            direction: 'sell',
+            offset: 'open'
+        });
+        if (!result.success) {
+            alert(result.message);
+        }
+        refreshOrders();
+    });
+
+    document.getElementById('btn-buy-close').addEventListener('click', async () => {
+        const result = await API.closePosition({
+            instrument_id: document.getElementById('input-instrument').value,
+            price: parseFloat(document.getElementById('input-price').value),
+            volume: parseInt(document.getElementById('input-volume').value),
+            direction: 'buy',
+            offset: 'close'
+        });
+        if (!result.success) {
+            alert(result.message);
+        }
+        refreshOrders();
+    });
+
+    document.getElementById('btn-sell-close').addEventListener('click', async () => {
+        const result = await API.closePosition({
+            instrument_id: document.getElementById('input-instrument').value,
+            price: parseFloat(document.getElementById('input-price').value),
+            volume: parseInt(document.getElementById('input-volume').value),
+            direction: 'sell',
+            offset: 'close'
+        });
+        if (!result.success) {
+            alert(result.message);
+        }
+        refreshOrders();
+    });
+
+    // ===== 阈值设置 =====
+    document.getElementById('btn-save-thresholds').addEventListener('click', async () => {
+        const result = await API.updateThresholds({
+            open_threshold: parseInt(document.getElementById('input-threshold-open').value),
+            close_threshold: parseInt(document.getElementById('input-threshold-close').value),
+            cancel_threshold: parseInt(document.getElementById('input-threshold-cancel').value),
+            total_order_threshold: parseInt(document.getElementById('input-threshold-total-order').value),
+            total_cancel_threshold: parseInt(document.getElementById('input-threshold-total-cancel').value)
+        });
+        if (result.success) {
+            alert('阈值设置已保存');
+        }
+    });
+
+    // ===== 错误防范测试 =====
+    async function testValidation(testType, resultId) {
+        let testData = {};
+        switch(testType) {
+            case 'invalid-instrument':
+                testData = { instrument_id: 'INVALID_CODE', direction: 'buy', offset: 'open', price: 1000, volume: 1 };
+                break;
+            case 'invalid-price':
+                testData = { instrument_id: 'IF2401', direction: 'buy', offset: 'open', price: 1000.123, volume: 1 };
+                break;
+            case 'invalid-volume':
+                testData = { instrument_id: 'IF2401', direction: 'buy', offset: 'open', price: 1000, volume: -1 };
+                break;
+            case 'insufficient-margin':
+                testData = { instrument_id: 'IF2401', direction: 'buy', offset: 'open', price: 999999, volume: 9999 };
+                break;
+            case 'insufficient-pos':
+                testData = { instrument_id: 'IF2401', direction: 'sell', offset: 'close', price: 1000, volume: 9999 };
+                break;
+            case 'non-trading-time':
+                testData = { instrument_id: 'IF2401', direction: 'buy', offset: 'open', price: 1000, volume: 1 };
+                break;
+        }
+
+        const result = await API.validateOrder(testData);
+        const resultEl = document.getElementById(resultId);
+        const errorEl = document.getElementById('error-message');
+
+        if (!result.valid && result.errors.length > 0) {
+            resultEl.textContent = '通过';
+            resultEl.className = 'badge bg-success me-2';
+            errorEl.textContent = result.errors.map(e => e.message).join('; ');
+        } else {
+            resultEl.textContent = '未触发';
+            resultEl.className = 'badge bg-warning me-2';
+            errorEl.textContent = '未触发错误提示';
+        }
+    }
+
+    document.getElementById('btn-test-invalid-instrument').addEventListener('click', () => testValidation('invalid-instrument', 'test-result-14'));
+    document.getElementById('btn-test-invalid-price').addEventListener('click', () => testValidation('invalid-price', 'test-result-15'));
+    document.getElementById('btn-test-invalid-volume').addEventListener('click', () => testValidation('invalid-volume', 'test-result-16'));
+    document.getElementById('btn-test-insufficient-margin').addEventListener('click', () => testValidation('insufficient-margin', 'test-result-17'));
+    document.getElementById('btn-test-insufficient-pos').addEventListener('click', () => testValidation('insufficient-pos', 'test-result-18'));
+    document.getElementById('btn-test-non-trading-time').addEventListener('click', () => testValidation('non-trading-time', 'test-result-19'));
+
+    // ===== 应急处置 =====
+    document.getElementById('btn-pause-trading').addEventListener('click', async () => {
+        const result = await API.pauseTrading({ reason: '手动暂停' });
+        if (result.success) {
+            AppState.tradingPaused = true;
+            updateTradingStatusUI();
+        }
+    });
+
+    document.getElementById('btn-resume-trading').addEventListener('click', async () => {
+        const result = await API.resumeTrading({ reason: '手动恢复' });
+        if (result.success) {
+            AppState.tradingPaused = false;
+            updateTradingStatusUI();
+        }
+    });
+
+    document.getElementById('btn-cancel-by-instrument').addEventListener('click', async () => {
+        const instrument = document.getElementById('input-cancel-instrument').value;
+        if (!instrument) {
+            alert('请输入合约代码');
+            return;
+        }
+        const result = await API.cancelByInstrument({ instrument_id: instrument });
+        alert(result.message);
+        refreshOrders();
+    });
+
+    document.getElementById('btn-cancel-all').addEventListener('click', async () => {
+        if (confirm('确定要撤销所有订单吗？')) {
+            const result = await API.cancelAll({ reason: '手动全部撤单' });
+            alert(result.message);
+            refreshOrders();
+        }
+    });
+
+    document.getElementById('btn-emergency-stop').addEventListener('click', async () => {
+        if (confirm('确定要执行紧急停止吗？这将暂停交易并撤销所有订单！')) {
+            const result = await API.emergencyStop({ reason: '紧急停止' });
+            if (result.success) {
+                AppState.tradingPaused = true;
+                updateTradingStatusUI();
+            }
+        }
+    });
+
+    // ===== 日志查看 =====
+    document.getElementById('btn-refresh-logs').addEventListener('click', refreshLogs);
+    document.getElementById('btn-export-logs').addEventListener('click', () => {
+        const logType = document.getElementById('select-log-type').value;
+        window.open(`/api/logs/export?log_type=${logType}`, '_blank');
+    });
+
+    async function refreshLogs() {
+        const logType = document.getElementById('select-log-type').value;
+        const logLevel = document.getElementById('select-log-level').value;
+
+        const result = await API.getLogs({
+            log_type: logType,
+            level: logLevel,
+            page: 1,
+            page_size: 100
+        });
+
+        const container = document.getElementById('log-container');
+        container.innerHTML = '';
+
+        if (result.logs) {
+            result.logs.forEach(log => {
+                const entry = document.createElement('div');
+                entry.className = 'log-entry';
+                entry.innerHTML = `
+                    <span class="timestamp">${log.timestamp}</span>
+                    [<span class="level-${log.level}">${log.level}</span>]
+                    [<span class="type">${log.type}</span>]
+                    ${log.message}
+                `;
+                container.appendChild(entry);
+            });
+        }
+    }
+
+    // ===== 定时刷新 =====
+    setInterval(async () => {
+        if (AppState.loggedIn) {
+            try {
+                const stats = await API.getOrderStats();
+                updateMonitorStats(stats);
+
+                const connStatus = await API.getConnectionMonitor();
+                document.getElementById('monitor-connection-status').textContent = connStatus.status;
+                document.getElementById('monitor-heartbeat').textContent = connStatus.heartbeat || '--';
+                document.getElementById('monitor-disconnect-count').textContent = connStatus.disconnect_count || 0;
+            } catch (error) {
+                console.error('Error refreshing stats:', error);
+            }
+        }
+    }, 5000);
+
+    // 初始加载阈值设置
+    setTimeout(async () => {
+        try {
+            const thresholds = await API.getThresholds();
+            if (thresholds.settings) {
+                document.getElementById('input-threshold-open').value = thresholds.settings.open_threshold || 10;
+                document.getElementById('input-threshold-close').value = thresholds.settings.close_threshold || 10;
+                document.getElementById('input-threshold-cancel').value = thresholds.settings.cancel_threshold || 10;
+                document.getElementById('input-threshold-total-order').value = thresholds.settings.total_order_threshold || 500;
+                document.getElementById('input-threshold-total-cancel').value = thresholds.settings.total_cancel_threshold || 400;
+            }
+        } catch (error) {
+            console.error('Error loading thresholds:', error);
+        }
+    }, 1000);
+});
