@@ -1,1 +1,16 @@
 .claude/
+
+# Python
+__pycache__/
+*.py[cod]
+*.so
+
+# Temp files
+tmpclaude-*
+nul
+
+# CTP flow files
+flow_*/
+
+# Logs (optional)
+# logs/

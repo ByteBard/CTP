@@ -1,0 +1,28 @@
+# 仿真环境配置
+# 期货仿真测试服务器
+
+connection:
+  broker_id: "66666"
+  investor_id: "88003785"
+  password: "024111"
+  app_id: "client_mltrader_1.0.0"
+  auth_code: "L8QDUC6XHBQR7WK2"
+  trade_front: "tcp://124.74.247.136:21407"
+  md_front: "tcp://124.74.247.136:21413"
+  flow_path: "./flow_sim/"
+
+threshold:
+  repeat_open_threshold: 10
+  repeat_close_threshold: 10
+  repeat_cancel_threshold: 10
+  total_order_threshold: 500
+  total_cancel_threshold: 500
+  max_order_volume: 1000
+
+alert:
+  enable_popup: true
+  enable_sound: true
+  enable_email: false
+
+log:
+  log_dir: "./logs_sim"
