@@ -12,5 +12,17 @@ nul
 # CTP flow files
 flow_*/
 
-# Logs (optional)
-# logs/
+# Build artifacts
+*.dll
+*.lib
+*.obj
+*.exp
+*.exe
+*.a
+
+# Large binaries
+vs_buildtools.exe
+
+# Logs
+*.log
+*_log.txt

@@ -1,0 +1,24 @@
+# Build artifacts
+*.dll
+*.lib
+*.obj
+*.exp
+*.exe
+*.a
+
+# CTP flow directories
+flow_*/
+flow/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# Log files
+*.log
+*_log.txt
+
+# IDE
+.vscode/
+.idea/
