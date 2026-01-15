@@ -1,5 +1,6 @@
 """
 CTP网关核心模块
+使用 CTP v6.6.8 官方 API (通过 ctp_wrapper)
 满足评估表要求：
 - 第1项：认证功能、登录系统
 - 第2项：开仓指令
@@ -7,25 +8,42 @@ CTP网关核心模块
 - 第4项：撤单指令
 """
 import os
+import sys
 import time
 import threading
 from typing import Optional, Dict, Callable, Any, List
 from enum import Enum
 from dataclasses import dataclass
 
-# CTP API导入（使用openctp-ctp或官方ctp库）
-try:
-    from openctp_ctp import tdapi, mdapi
-except ImportError:
-    try:
-        from ctp import tdapi, mdapi
-    except ImportError:
-        # 模拟模式，用于测试
-        tdapi = None
-        mdapi = None
+# 添加 ctp_api 路径
+ctp_api_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'ctp_api')
+if ctp_api_path not in sys.path:
+    sys.path.insert(0, ctp_api_path)
 
-from ..config.settings import Settings, ConnectionConfig
-from ..trade_logging.trade_logger import get_logger, TradeLogger
+# 导入我们的 CTP 封装
+try:
+    from ctp_api import (
+        CTPTraderApi,
+        Direction as CTPDirection,
+        OffsetFlag as CTPOffsetFlag,
+        OrderPriceType as CTPOrderPriceType,
+        TimeCondition as CTPTimeCondition,
+        VolumeCondition as CTPVolumeCondition,
+        OrderStatus as CTPOrderStatus,
+        ResumeType,
+    )
+    CTP_API_AVAILABLE = True
+except ImportError as e:
+    print(f"警告: 无法导入 CTP API: {e}")
+    CTP_API_AVAILABLE = False
+
+# 支持直接运行和作为模块导入
+try:
+    from ..config.settings import Settings, ConnectionConfig
+    from ..trade_logging.trade_logger import get_logger, TradeLogger
+except ImportError:
+    from config.settings import Settings, ConnectionConfig
+    from trade_logging.trade_logger import get_logger, TradeLogger
 
 
 class Direction(Enum):
@@ -70,183 +88,10 @@ class OrderRequest:
     contingent_condition: str = '1'  # 立即
 
 
-class CtpTraderSpi:
-    """
-    交易回调处理类
-    处理CTP交易API的所有回调
-    """
-
-    def __init__(self, gateway: "CtpGateway"):
-        self.gateway = gateway
-        self.logger: TradeLogger = get_logger()
-
-    def OnFrontConnected(self):
-        """连接成功回调"""
-        self.logger.log_connection("CONNECTED", self.gateway.config.trade_front)
-        self.gateway._on_front_connected()
-
-    def OnFrontDisconnected(self, nReason: int):
-        """连接断开回调"""
-        reason_map = {
-            0x1001: "网络读失败",
-            0x1002: "网络写失败",
-            0x2001: "接收心跳超时",
-            0x2002: "发送心跳失败",
-            0x2003: "收到错误报文",
-        }
-        reason_msg = reason_map.get(nReason, f"未知原因({nReason})")
-        self.logger.log_connection("DISCONNECTED", error_msg=reason_msg)
-        self.gateway._on_front_disconnected(nReason)
-
-    def OnHeartBeatWarning(self, nTimeLapse: int):
-        """心跳警告"""
-        self.logger.log_heartbeat(nTimeLapse)
-
-    def OnRspAuthenticate(self, pRspAuthenticateField, pRspInfo, nRequestID, bIsLast):
-        """客户端认证响应"""
-        if pRspInfo and pRspInfo.ErrorID != 0:
-            self.logger.log_authenticate(
-                success=False,
-                error_msg=pRspInfo.ErrorMsg,
-                error_code=pRspInfo.ErrorID
-            )
-            self.gateway._on_authenticate_failed(pRspInfo.ErrorID, pRspInfo.ErrorMsg)
-        else:
-            self.logger.log_authenticate(success=True)
-            self.gateway._on_authenticate_success()
-
-    def OnRspUserLogin(self, pRspUserLogin, pRspInfo, nRequestID, bIsLast):
-        """登录响应"""
-        if pRspInfo and pRspInfo.ErrorID != 0:
-            self.logger.log_login(
-                investor_id=self.gateway.config.investor_id,
-                success=False,
-                error_msg=pRspInfo.ErrorMsg,
-                error_code=pRspInfo.ErrorID
-            )
-            self.gateway._on_login_failed(pRspInfo.ErrorID, pRspInfo.ErrorMsg)
-        else:
-            self.logger.log_login(
-                investor_id=self.gateway.config.investor_id,
-                success=True,
-                trading_day=pRspUserLogin.TradingDay if pRspUserLogin else "",
-                front_id=pRspUserLogin.FrontID if pRspUserLogin else 0,
-                session_id=pRspUserLogin.SessionID if pRspUserLogin else 0
-            )
-            self.gateway._on_login_success(pRspUserLogin)
-
-    def OnRspUserLogout(self, pUserLogout, pRspInfo, nRequestID, bIsLast):
-        """登出响应"""
-        self.logger.log_system("用户登出", {
-            "investor_id": pUserLogout.UserID if pUserLogout else ""
-        })
-
-    def OnRspOrderInsert(self, pInputOrder, pRspInfo, nRequestID, bIsLast):
-        """报单录入响应（错误时）"""
-        if pRspInfo and pRspInfo.ErrorID != 0:
-            self.logger.log_error(
-                "报单失败",
-                error_code=pRspInfo.ErrorID,
-                error_msg=pRspInfo.ErrorMsg,
-                instrument_id=pInputOrder.InstrumentID if pInputOrder else ""
-            )
-            self.gateway._on_order_error(pInputOrder, pRspInfo)
-
-    def OnRspOrderAction(self, pInputOrderAction, pRspInfo, nRequestID, bIsLast):
-        """撤单响应（错误时）"""
-        if pRspInfo and pRspInfo.ErrorID != 0:
-            self.logger.log_error(
-                "撤单失败",
-                error_code=pRspInfo.ErrorID,
-                error_msg=pRspInfo.ErrorMsg,
-                order_ref=pInputOrderAction.OrderRef if pInputOrderAction else ""
-            )
-            self.gateway._on_cancel_error(pInputOrderAction, pRspInfo)
-
-    def OnRtnOrder(self, pOrder):
-        """报单回报"""
-        if pOrder:
-            self.logger.log_order_status(
-                order_ref=pOrder.OrderRef,
-                status=pOrder.OrderStatus,
-                status_msg=pOrder.StatusMsg,
-                instrument_id=pOrder.InstrumentID,
-                direction=pOrder.Direction,
-                offset=pOrder.CombOffsetFlag,
-                volume_total=pOrder.VolumeTotal,
-                volume_traded=pOrder.VolumeTraded
-            )
-            self.gateway._on_order(pOrder)
-
-    def OnRtnTrade(self, pTrade):
-        """成交回报"""
-        if pTrade:
-            self.logger.log_trade(
-                instrument_id=pTrade.InstrumentID,
-                direction=pTrade.Direction,
-                offset=pTrade.OffsetFlag,
-                price=pTrade.Price,
-                volume=pTrade.Volume,
-                trade_id=pTrade.TradeID,
-                order_ref=pTrade.OrderRef
-            )
-            self.gateway._on_trade(pTrade)
-
-    def OnErrRtnOrderInsert(self, pInputOrder, pRspInfo):
-        """报单错误回报"""
-        if pRspInfo:
-            self.logger.log_error(
-                "报单错误回报",
-                error_code=pRspInfo.ErrorID,
-                error_msg=pRspInfo.ErrorMsg
-            )
-
-    def OnErrRtnOrderAction(self, pOrderAction, pRspInfo):
-        """撤单错误回报"""
-        if pRspInfo:
-            self.logger.log_error(
-                "撤单错误回报",
-                error_code=pRspInfo.ErrorID,
-                error_msg=pRspInfo.ErrorMsg
-            )
-
-    def OnRspQryInstrument(self, pInstrument, pRspInfo, nRequestID, bIsLast):
-        """查询合约响应"""
-        if pInstrument:
-            self.gateway._on_instrument(pInstrument)
-        if bIsLast:
-            self.gateway._on_instrument_query_complete()
-
-    def OnRspQryTradingAccount(self, pTradingAccount, pRspInfo, nRequestID, bIsLast):
-        """查询资金账户响应"""
-        if pTradingAccount:
-            self.gateway._on_account(pTradingAccount)
-
-    def OnRspQryInvestorPosition(self, pInvestorPosition, pRspInfo, nRequestID, bIsLast):
-        """查询持仓响应"""
-        if pInvestorPosition:
-            self.gateway._on_position(pInvestorPosition)
-        if bIsLast:
-            self.gateway._on_position_query_complete()
-
-    def OnRspSettlementInfoConfirm(self, pSettlementInfoConfirm, pRspInfo, nRequestID, bIsLast):
-        """结算单确认响应"""
-        self.logger.log_system("结算单确认完成")
-        self.gateway._on_settlement_confirmed()
-
-    def OnRspError(self, pRspInfo, nRequestID, bIsLast):
-        """错误响应"""
-        if pRspInfo:
-            self.logger.log_error(
-                "CTP错误",
-                error_code=pRspInfo.ErrorID,
-                error_msg=pRspInfo.ErrorMsg
-            )
-
-
 class CtpGateway:
     """
     CTP交易网关
+    使用 CTP v6.6.8 官方 API
     满足评估表第1-4项要求
     """
 
@@ -262,9 +107,7 @@ class CtpGateway:
         self.logger: TradeLogger = get_logger()
 
         # API实例
-        self._td_api = None
-        self._md_api = None
-        self._spi = None
+        self._api: Optional[CTPTraderApi] = None
 
         # 状态
         self._connected = False
@@ -282,7 +125,7 @@ class CtpGateway:
         # 数据缓存
         self._instruments: Dict[str, Any] = {}
         self._positions: Dict[str, Any] = {}
-        self._account: Optional[Any] = None
+        self._account: Optional[Dict] = None
         self._orders: Dict[str, Any] = {}
 
         # 回调
@@ -300,6 +143,8 @@ class CtpGateway:
         self._login_event = threading.Event()
         self._settlement_event = threading.Event()
         self._instrument_event = threading.Event()
+        self._account_event = threading.Event()
+        self._position_event = threading.Event()
 
         # 锁
         self._lock = threading.Lock()
@@ -316,6 +161,267 @@ class CtpGateway:
             self._order_ref += 1
             return str(self._order_ref)
 
+    def _setup_callbacks(self):
+        """设置API回调"""
+        if not self._api:
+            return
+
+        # 连接回调
+        def on_connected():
+            self.logger.log_connection("CONNECTED", self.config.trade_front)
+            self._connected = True
+            self._connect_event.set()
+            for callback in self._callbacks.get("on_connected", []):
+                try:
+                    callback()
+                except Exception as e:
+                    self.logger.log_exception(e, "on_connected callback")
+
+        def on_disconnected(reason):
+            reason_map = {
+                0x1001: "网络读失败",
+                0x1002: "网络写失败",
+                0x2001: "接收心跳超时",
+                0x2002: "发送心跳失败",
+                0x2003: "收到错误报文",
+            }
+            reason_msg = reason_map.get(reason, f"未知原因({reason})")
+            self.logger.log_connection("DISCONNECTED", error_msg=reason_msg)
+            self._connected = False
+            self._authenticated = False
+            self._logged_in = False
+            for callback in self._callbacks.get("on_disconnected", []):
+                try:
+                    callback(reason)
+                except Exception as e:
+                    self.logger.log_exception(e, "on_disconnected callback")
+
+        def on_heartbeat_warning(time_lapse):
+            self.logger.log_heartbeat(time_lapse)
+
+        # 认证回调
+        def on_authenticate(broker_id, user_id, app_id, error_id, error_msg, request_id, is_last):
+            if error_id != 0:
+                self.logger.log_authenticate(success=False, error_msg=error_msg, error_code=error_id)
+                self._authenticated = False
+            else:
+                self.logger.log_authenticate(success=True)
+                self._authenticated = True
+            self._auth_event.set()
+
+        # 登录回调
+        def on_login(trading_day, login_time, broker_id, user_id, front_id, session_id,
+                     max_order_ref, error_id, error_msg, request_id, is_last):
+            if error_id != 0:
+                self.logger.log_login(
+                    investor_id=self.config.investor_id,
+                    success=False,
+                    error_msg=error_msg,
+                    error_code=error_id
+                )
+                self._logged_in = False
+            else:
+                self.logger.log_login(
+                    investor_id=self.config.investor_id,
+                    success=True,
+                    trading_day=trading_day,
+                    front_id=front_id,
+                    session_id=session_id
+                )
+                self._logged_in = True
+                self._front_id = front_id
+                self._session_id = session_id
+                self._trading_day = trading_day
+                if max_order_ref:
+                    try:
+                        self._order_ref = int(max_order_ref)
+                    except:
+                        pass
+            self._login_event.set()
+
+        def on_logout(broker_id, user_id, error_id, error_msg, request_id, is_last):
+            self.logger.log_system("用户登出", {"investor_id": user_id})
+
+        # 结算确认回调
+        def on_settlement_confirm(broker_id, investor_id, confirm_date, confirm_time,
+                                  error_id, error_msg, request_id, is_last):
+            self.logger.log_system("结算单确认完成")
+            self._settlement_event.set()
+
+        # 报单回调
+        def on_order_insert(broker_id, investor_id, instrument_id, order_ref, direction,
+                           offset_flag, price, volume, error_id, error_msg, request_id, is_last):
+            if error_id != 0:
+                self.logger.log_error(
+                    "报单失败",
+                    error_code=error_id,
+                    error_msg=error_msg,
+                    instrument_id=instrument_id
+                )
+                for callback in self._callbacks.get("on_error", []):
+                    try:
+                        callback("order_error", {"instrument_id": instrument_id, "order_ref": order_ref},
+                                {"ErrorID": error_id, "ErrorMsg": error_msg})
+                    except Exception as e:
+                        self.logger.log_exception(e, "on_error callback")
+
+        def on_order_action(broker_id, investor_id, instrument_id, order_ref, front_id,
+                           session_id, order_sys_id, error_id, error_msg, request_id, is_last):
+            if error_id != 0:
+                self.logger.log_error(
+                    "撤单失败",
+                    error_code=error_id,
+                    error_msg=error_msg,
+                    order_ref=order_ref
+                )
+                for callback in self._callbacks.get("on_error", []):
+                    try:
+                        callback("cancel_error", {"order_ref": order_ref},
+                                {"ErrorID": error_id, "ErrorMsg": error_msg})
+                    except Exception as e:
+                        self.logger.log_exception(e, "on_error callback")
+
+        def on_rtn_order(broker_id, investor_id, instrument_id, order_ref, user_id,
+                        direction, offset_flag, price, volume_total, volume_traded,
+                        order_status, order_sys_id, front_id, session_id,
+                        insert_date, insert_time, status_msg):
+            self.logger.log_order_status(
+                order_ref=order_ref,
+                status=chr(order_status) if isinstance(order_status, int) else order_status,
+                status_msg=status_msg,
+                instrument_id=instrument_id,
+                direction=chr(direction) if isinstance(direction, int) else direction,
+                offset=chr(offset_flag) if isinstance(offset_flag, int) else offset_flag,
+                volume_total=volume_total,
+                volume_traded=volume_traded
+            )
+            order_data = {
+                "OrderRef": order_ref,
+                "InstrumentID": instrument_id,
+                "Direction": chr(direction) if isinstance(direction, int) else direction,
+                "CombOffsetFlag": chr(offset_flag) if isinstance(offset_flag, int) else offset_flag,
+                "LimitPrice": price,
+                "VolumeTotal": volume_total,
+                "VolumeTraded": volume_traded,
+                "OrderStatus": chr(order_status) if isinstance(order_status, int) else order_status,
+                "OrderSysID": order_sys_id,
+                "FrontID": front_id,
+                "SessionID": session_id,
+                "StatusMsg": status_msg,
+            }
+            self._orders[order_ref] = order_data
+            for callback in self._callbacks.get("on_order", []):
+                try:
+                    callback(order_data)
+                except Exception as e:
+                    self.logger.log_exception(e, "on_order callback")
+
+        def on_rtn_trade(broker_id, investor_id, instrument_id, order_ref, user_id,
+                        trade_id, direction, offset_flag, price, volume,
+                        trade_date, trade_time, order_sys_id):
+            self.logger.log_trade(
+                instrument_id=instrument_id,
+                direction=chr(direction) if isinstance(direction, int) else direction,
+                offset=chr(offset_flag) if isinstance(offset_flag, int) else offset_flag,
+                price=price,
+                volume=volume,
+                trade_id=trade_id,
+                order_ref=order_ref
+            )
+            trade_data = {
+                "TradeID": trade_id,
+                "InstrumentID": instrument_id,
+                "Direction": chr(direction) if isinstance(direction, int) else direction,
+                "OffsetFlag": chr(offset_flag) if isinstance(offset_flag, int) else offset_flag,
+                "Price": price,
+                "Volume": volume,
+                "OrderRef": order_ref,
+                "TradeDate": trade_date,
+                "TradeTime": trade_time,
+            }
+            for callback in self._callbacks.get("on_trade", []):
+                try:
+                    callback(trade_data)
+                except Exception as e:
+                    self.logger.log_exception(e, "on_trade callback")
+
+        # 查询回调
+        def on_qry_instrument(instrument_id, exchange_id, instrument_name, product_id,
+                             volume_multiple, price_tick, long_margin_ratio, short_margin_ratio,
+                             is_trading, error_id, error_msg, request_id, is_last):
+            if instrument_id:
+                self._instruments[instrument_id] = {
+                    "instrument_id": instrument_id,
+                    "exchange_id": exchange_id,
+                    "instrument_name": instrument_name,
+                    "product_id": product_id,
+                    "volume_multiple": volume_multiple,
+                    "price_tick": price_tick,
+                    "long_margin_ratio": long_margin_ratio,
+                    "short_margin_ratio": short_margin_ratio,
+                    "is_trading": is_trading,
+                }
+            if is_last:
+                self.settings.instruments = self._instruments
+                self._instrument_event.set()
+
+        def on_qry_trading_account(broker_id, account_id, balance, available, frozen_cash,
+                                   curr_margin, close_profit, position_profit,
+                                   commission, withdraw_quota,
+                                   error_id, error_msg, request_id, is_last):
+            if account_id:
+                self._account = {
+                    "account_id": account_id,
+                    "balance": balance,
+                    "available": available,
+                    "frozen_cash": frozen_cash,
+                    "curr_margin": curr_margin,
+                    "close_profit": close_profit,
+                    "position_profit": position_profit,
+                    "commission": commission,
+                    "withdraw_quota": withdraw_quota,
+                }
+            if is_last:
+                self._account_event.set()
+
+        def on_qry_position(broker_id, investor_id, instrument_id, position_direction,
+                           position, yd_position, position_cost, open_cost,
+                           use_margin, frozen_margin,
+                           error_id, error_msg, request_id, is_last):
+            if instrument_id and position > 0:
+                key = f"{instrument_id}_{chr(position_direction) if isinstance(position_direction, int) else position_direction}"
+                self._positions[key] = {
+                    "instrument_id": instrument_id,
+                    "direction": chr(position_direction) if isinstance(position_direction, int) else position_direction,
+                    "position": position,
+                    "yd_position": yd_position,
+                    "today_position": position - yd_position,
+                    "position_cost": position_cost,
+                    "use_margin": use_margin,
+                }
+            if is_last:
+                self._position_event.set()
+
+        def on_error(error_id, error_msg, request_id, is_last):
+            self.logger.log_error("CTP错误", error_code=error_id, error_msg=error_msg)
+
+        # 注册回调
+        self._api.on_front_connected = on_connected
+        self._api.on_front_disconnected = on_disconnected
+        self._api.on_heartbeat_warning = on_heartbeat_warning
+        self._api.on_rsp_authenticate = on_authenticate
+        self._api.on_rsp_user_login = on_login
+        self._api.on_rsp_user_logout = on_logout
+        self._api.on_rsp_settlement_info_confirm = on_settlement_confirm
+        self._api.on_rsp_order_insert = on_order_insert
+        self._api.on_rsp_order_action = on_order_action
+        self._api.on_rtn_order = on_rtn_order
+        self._api.on_rtn_trade = on_rtn_trade
+        self._api.on_rsp_qry_instrument = on_qry_instrument
+        self._api.on_rsp_qry_trading_account = on_qry_trading_account
+        self._api.on_rsp_qry_investor_position = on_qry_position
+        self._api.on_rsp_error = on_error
+
     # ==================== 连接管理 ====================
 
     def connect(self, timeout: int = 30) -> bool:
@@ -329,8 +435,8 @@ class CtpGateway:
         Returns:
             是否连接成功
         """
-        if tdapi is None:
-            self.logger.log_error("CTP API未安装，请安装openctp-ctp")
+        if not CTP_API_AVAILABLE:
+            self.logger.log_error("CTP API 未加载")
             return False
 
         self.logger.log_system("开始连接CTP服务器", {
@@ -338,29 +444,26 @@ class CtpGateway:
         })
 
         # 创建流文件目录
-        os.makedirs(self.config.flow_path, exist_ok=True)
+        flow_path = self.config.flow_path
+        os.makedirs(flow_path, exist_ok=True)
 
         # 创建API实例
-        self._td_api = tdapi.CThostFtdcTraderApi.CreateFtdcTraderApi(
-            self.config.flow_path
-        )
+        self._api = CTPTraderApi()
+        self._api.create_api(flow_path)
 
-        # 创建SPI实例
-        self._spi = CtpTraderSpi(self)
-
-        # 注册SPI
-        self._td_api.RegisterSpi(self._spi)
+        # 设置回调
+        self._setup_callbacks()
 
         # 注册前置
-        self._td_api.RegisterFront(self.config.trade_front)
+        self._api.register_front(self.config.trade_front)
 
         # 订阅私有流和公有流
-        self._td_api.SubscribePrivateTopic(2)  # THOST_TERT_QUICK
-        self._td_api.SubscribePublicTopic(2)
+        self._api.subscribe_private_topic(ResumeType.QUICK)
+        self._api.subscribe_public_topic(ResumeType.QUICK)
 
         # 初始化连接
         self._connect_event.clear()
-        self._td_api.Init()
+        self._api.init()
 
         # 等待连接
         if not self._connect_event.wait(timeout):
@@ -368,31 +471,6 @@ class CtpGateway:
             return False
 
         return self._connected
-
-    def _on_front_connected(self):
-        """连接成功回调处理"""
-        self._connected = True
-        self._connect_event.set()
-
-        # 触发回调
-        for callback in self._callbacks.get("on_connected", []):
-            try:
-                callback()
-            except Exception as e:
-                self.logger.log_exception(e, "on_connected callback")
-
-    def _on_front_disconnected(self, reason: int):
-        """连接断开回调处理"""
-        self._connected = False
-        self._authenticated = False
-        self._logged_in = False
-
-        # 触发回调
-        for callback in self._callbacks.get("on_disconnected", []):
-            try:
-                callback(reason)
-            except Exception as e:
-                self.logger.log_exception(e, "on_disconnected callback")
 
     # ==================== 认证登录 ====================
 
@@ -413,14 +491,14 @@ class CtpGateway:
 
         self.logger.log_system("开始客户端认证")
 
-        req = tdapi.CThostFtdcReqAuthenticateField()
-        req.BrokerID = self.config.broker_id
-        req.UserID = self.config.investor_id
-        req.AppID = self.config.app_id
-        req.AuthCode = self.config.auth_code
-
         self._auth_event.clear()
-        ret = self._td_api.ReqAuthenticate(req, self._get_request_id())
+        ret = self._api.req_authenticate(
+            broker_id=self.config.broker_id,
+            user_id=self.config.investor_id,
+            app_id=self.config.app_id,
+            auth_code=self.config.auth_code,
+            request_id=self._get_request_id()
+        )
 
         if ret != 0:
             self.logger.log_error("认证请求发送失败", error_code=ret)
@@ -431,16 +509,6 @@ class CtpGateway:
             return False
 
         return self._authenticated
-
-    def _on_authenticate_success(self):
-        """认证成功"""
-        self._authenticated = True
-        self._auth_event.set()
-
-    def _on_authenticate_failed(self, error_code: int, error_msg: str):
-        """认证失败"""
-        self._authenticated = False
-        self._auth_event.set()
 
     def login(self, timeout: int = 10) -> bool:
         """
@@ -461,13 +529,13 @@ class CtpGateway:
             "investor_id": self.config.investor_id
         })
 
-        req = tdapi.CThostFtdcReqUserLoginField()
-        req.BrokerID = self.config.broker_id
-        req.UserID = self.config.investor_id
-        req.Password = self.config.password
-
         self._login_event.clear()
-        ret = self._td_api.ReqUserLogin(req, self._get_request_id())
+        ret = self._api.req_user_login(
+            broker_id=self.config.broker_id,
+            user_id=self.config.investor_id,
+            password=self.config.password,
+            request_id=self._get_request_id()
+        )
 
         if ret != 0:
             self.logger.log_error("登录请求发送失败", error_code=ret)
@@ -479,41 +547,22 @@ class CtpGateway:
 
         return self._logged_in
 
-    def _on_login_success(self, login_info):
-        """登录成功"""
-        self._logged_in = True
-        if login_info:
-            self._front_id = login_info.FrontID
-            self._session_id = login_info.SessionID
-            self._trading_day = login_info.TradingDay
-            self._order_ref = int(login_info.MaxOrderRef) if login_info.MaxOrderRef else 0
-        self._login_event.set()
-
-    def _on_login_failed(self, error_code: int, error_msg: str):
-        """登录失败"""
-        self._logged_in = False
-        self._login_event.set()
-
     def confirm_settlement(self, timeout: int = 10) -> bool:
         """确认结算单"""
         if not self._logged_in:
             return False
 
-        req = tdapi.CThostFtdcSettlementInfoConfirmField()
-        req.BrokerID = self.config.broker_id
-        req.InvestorID = self.config.investor_id
-
         self._settlement_event.clear()
-        ret = self._td_api.ReqSettlementInfoConfirm(req, self._get_request_id())
+        ret = self._api.req_settlement_info_confirm(
+            broker_id=self.config.broker_id,
+            investor_id=self.config.investor_id,
+            request_id=self._get_request_id()
+        )
 
         if ret != 0:
             return False
 
         return self._settlement_event.wait(timeout)
-
-    def _on_settlement_confirmed(self):
-        """结算单确认完成"""
-        self._settlement_event.set()
 
     # ==================== 交易功能 ====================
 
@@ -591,21 +640,17 @@ class CtpGateway:
             order_sys_id=order_sys_id
         )
 
-        req = tdapi.CThostFtdcInputOrderActionField()
-        req.BrokerID = self.config.broker_id
-        req.InvestorID = self.config.investor_id
-        req.InstrumentID = instrument_id
-        req.OrderRef = order_ref
-        req.FrontID = self._front_id
-        req.SessionID = self._session_id
-        req.ActionFlag = '0'  # 撤单
-
-        if exchange_id:
-            req.ExchangeID = exchange_id
-        if order_sys_id:
-            req.OrderSysID = order_sys_id
-
-        ret = self._td_api.ReqOrderAction(req, self._get_request_id())
+        ret = self._api.req_order_action(
+            broker_id=self.config.broker_id,
+            investor_id=self.config.investor_id,
+            instrument_id=instrument_id,
+            order_ref=order_ref,
+            front_id=self._front_id,
+            session_id=self._session_id,
+            exchange_id=exchange_id,
+            order_sys_id=order_sys_id,
+            request_id=self._get_request_id()
+        )
 
         if ret != 0:
             self.logger.log_error("撤单请求发送失败", error_code=ret)
@@ -635,65 +680,35 @@ class CtpGateway:
             order_ref=order_ref
         )
 
-        req = tdapi.CThostFtdcInputOrderField()
-        req.BrokerID = self.config.broker_id
-        req.InvestorID = self.config.investor_id
-        req.InstrumentID = instrument_id
-        req.OrderRef = order_ref
-        req.Direction = direction.value
-        req.CombOffsetFlag = offset.value
-        req.CombHedgeFlag = '1'  # 投机
-        req.LimitPrice = price
-        req.VolumeTotalOriginal = volume
-        req.OrderPriceType = '2'  # 限价
-        req.TimeCondition = '3'   # 当日有效
-        req.VolumeCondition = '1' # 任意数量
-        req.ContingentCondition = '1'  # 立即
-        req.ForceCloseReason = '0'  # 非强平
-        req.IsAutoSuspend = 0
-        req.MinVolume = 1
+        # 转换方向和开平标志
+        ctp_direction = CTPDirection.BUY if direction == Direction.BUY else CTPDirection.SELL
 
-        ret = self._td_api.ReqOrderInsert(req, self._get_request_id())
+        ctp_offset_map = {
+            OffsetFlag.OPEN: CTPOffsetFlag.OPEN,
+            OffsetFlag.CLOSE: CTPOffsetFlag.CLOSE,
+            OffsetFlag.CLOSE_TODAY: CTPOffsetFlag.CLOSE_TODAY,
+            OffsetFlag.CLOSE_YESTERDAY: CTPOffsetFlag.CLOSE_YESTERDAY,
+            OffsetFlag.FORCE_CLOSE: CTPOffsetFlag.FORCE_CLOSE,
+        }
+        ctp_offset = ctp_offset_map.get(offset, CTPOffsetFlag.OPEN)
+
+        ret = self._api.req_order_insert(
+            broker_id=self.config.broker_id,
+            investor_id=self.config.investor_id,
+            instrument_id=instrument_id,
+            order_ref=order_ref,
+            direction=ctp_direction,
+            offset_flag=ctp_offset,
+            price=price,
+            volume=volume,
+            request_id=self._get_request_id()
+        )
 
         if ret != 0:
             self.logger.log_error("报单请求发送失败", error_code=ret)
             return None
 
         return order_ref
-
-    def _on_order(self, order):
-        """订单回报处理"""
-        if order:
-            self._orders[order.OrderRef] = order
-            for callback in self._callbacks.get("on_order", []):
-                try:
-                    callback(order)
-                except Exception as e:
-                    self.logger.log_exception(e, "on_order callback")
-
-    def _on_trade(self, trade):
-        """成交回报处理"""
-        for callback in self._callbacks.get("on_trade", []):
-            try:
-                callback(trade)
-            except Exception as e:
-                self.logger.log_exception(e, "on_trade callback")
-
-    def _on_order_error(self, order, rsp_info):
-        """报单错误处理"""
-        for callback in self._callbacks.get("on_error", []):
-            try:
-                callback("order_error", order, rsp_info)
-            except Exception as e:
-                self.logger.log_exception(e, "on_error callback")
-
-    def _on_cancel_error(self, action, rsp_info):
-        """撤单错误处理"""
-        for callback in self._callbacks.get("on_error", []):
-            try:
-                callback("cancel_error", action, rsp_info)
-            except Exception as e:
-                self.logger.log_exception(e, "on_error callback")
 
     # ==================== 查询功能 ====================
 
@@ -702,94 +717,57 @@ class CtpGateway:
         if not self._logged_in:
             return {}
 
-        req = tdapi.CThostFtdcQryInstrumentField()
         self._instruments.clear()
         self._instrument_event.clear()
 
-        ret = self._td_api.ReqQryInstrument(req, self._get_request_id())
+        ret = self._api.req_qry_instrument(
+            instrument_id="",
+            exchange_id="",
+            product_id="",
+            request_id=self._get_request_id()
+        )
         if ret != 0:
             return {}
 
         self._instrument_event.wait(timeout)
         return self._instruments
 
-    def _on_instrument(self, instrument):
-        """合约查询回调"""
-        if instrument:
-            self._instruments[instrument.InstrumentID] = {
-                "instrument_id": instrument.InstrumentID,
-                "exchange_id": instrument.ExchangeID,
-                "instrument_name": instrument.InstrumentName,
-                "product_class": instrument.ProductClass,
-                "volume_multiple": instrument.VolumeMultiple,
-                "price_tick": instrument.PriceTick,
-                "max_order_volume": instrument.MaxLimitOrderVolume,
-                "min_order_volume": instrument.MinLimitOrderVolume,
-            }
-
-    def _on_instrument_query_complete(self):
-        """合约查询完成"""
-        self.settings.instruments = self._instruments
-        self._instrument_event.set()
-
-    def query_account(self) -> Optional[Dict]:
+    def query_account(self, timeout: int = 10) -> Optional[Dict]:
         """查询资金账户"""
         if not self._logged_in:
             return None
 
-        req = tdapi.CThostFtdcQryTradingAccountField()
-        req.BrokerID = self.config.broker_id
-        req.InvestorID = self.config.investor_id
-
-        ret = self._td_api.ReqQryTradingAccount(req, self._get_request_id())
+        self._account_event.clear()
+        ret = self._api.req_qry_trading_account(
+            broker_id=self.config.broker_id,
+            investor_id=self.config.investor_id,
+            request_id=self._get_request_id()
+        )
         if ret != 0:
             return None
 
-        time.sleep(1)  # 等待响应
+        self._account_event.wait(timeout)
         return self._account
 
-    def _on_account(self, account):
-        """资金账户查询回调"""
-        if account:
-            self._account = {
-                "available": account.Available,
-                "balance": account.Balance,
-                "frozen_margin": account.FrozenMargin,
-                "frozen_commission": account.FrozenCommission,
-            }
-
-    def query_position(self) -> Dict[str, Any]:
+    def query_position(self, timeout: int = 10) -> Dict[str, Any]:
         """查询持仓"""
         if not self._logged_in:
             return {}
 
-        req = tdapi.CThostFtdcQryInvestorPositionField()
-        req.BrokerID = self.config.broker_id
-        req.InvestorID = self.config.investor_id
-
         self._positions.clear()
-        ret = self._td_api.ReqQryInvestorPosition(req, self._get_request_id())
+        self._position_event.clear()
+
+        ret = self._api.req_qry_investor_position(
+            broker_id=self.config.broker_id,
+            investor_id=self.config.investor_id,
+            instrument_id="",
+            request_id=self._get_request_id()
+        )
         if ret != 0:
             return {}
 
-        time.sleep(1)  # 等待响应
+        self._position_event.wait(timeout)
         return self._positions
-
-    def _on_position(self, position):
-        """持仓查询回调"""
-        if position and position.InstrumentID:
-            key = f"{position.InstrumentID}_{position.PosiDirection}"
-            self._positions[key] = {
-                "instrument_id": position.InstrumentID,
-                "direction": position.PosiDirection,
-                "position": position.Position,
-                "today_position": position.TodayPosition,
-                "yd_position": position.YdPosition,
-            }
-
-    def _on_position_query_complete(self):
-        """持仓查询完成"""
-        pass
 
     # ==================== 交易控制 ====================
 
@@ -832,9 +810,9 @@ class CtpGateway:
     def close(self):
         """关闭连接"""
         self.logger.log_system("关闭CTP连接")
-        if self._td_api:
-            self._td_api.Release()
-            self._td_api = None
+        if self._api:
+            self._api.release()
+            self._api = None
         self._connected = False
         self._authenticated = False
         self._logged_in = False

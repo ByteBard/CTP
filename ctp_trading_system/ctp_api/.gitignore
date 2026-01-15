@@ -1,0 +1,9 @@
+# Exclude binary files - they should be compiled locally
+*.dll
+*.pyd
+*.so
+*.dylib
+
+# Keep Python source files
+!ctp_api.py
+!__init__.py

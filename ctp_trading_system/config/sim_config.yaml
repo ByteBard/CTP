@@ -4,7 +4,7 @@
 connection:
   broker_id: "66666"
   investor_id: "88003785"
-  password: "024111"
+  password: "Ctp123456"
   app_id: "client_mltrader_1.0.0"
   auth_code: "L8QDUC6XHBQR7WK2"
   trade_front: "tcp://124.74.247.136:21407"
