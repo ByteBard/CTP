@@ -26,3 +26,10 @@ vs_buildtools.exe
 # Logs
 *.log
 *_log.txt
+
+# External CTP libraries
+CTPAPI-Python/
+ctpapi_local/
+
+# Test reports
+ctp_trading_system/test_reports/
