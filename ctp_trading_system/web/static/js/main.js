@@ -318,7 +318,11 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 
     document.getElementById('btn-authenticate').addEventListener('click', async () => {
-        const result = await API.authenticate({});
+        const result = await API.authenticate({
+            investor_id: document.getElementById('input-investor-id').value,
+            app_id: document.getElementById('input-app-id').value,
+            auth_code: document.getElementById('input-auth-code').value
+        });
         if (result.success) {
             updateConnectionUI('authenticated');
         } else {

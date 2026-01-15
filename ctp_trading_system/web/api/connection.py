@@ -22,6 +22,7 @@ class ConnectRequest(BaseModel):
 
 class AuthenticateRequest(BaseModel):
     """认证请求"""
+    investor_id: str
     app_id: Optional[str] = "simnow_client_test"
     auth_code: Optional[str] = "0000000000000000"
 
@@ -86,6 +87,7 @@ async def authenticate(request: AuthenticateRequest):
 
     try:
         # 更新认证信息
+        system.settings.connection.investor_id = request.investor_id
         if request.app_id:
             system.settings.connection.app_id = request.app_id
         if request.auth_code:
