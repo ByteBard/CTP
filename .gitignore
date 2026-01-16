@@ -34,3 +34,4 @@ ctpapi_local/
 
 # Test reports
 ctp_trading_system/test_reports/
+dist/CTP_Trading_System/
