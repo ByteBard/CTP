@@ -6,20 +6,100 @@
 
 - **开发语言**: Python 3.8+
 - **CTP版本**: v6.6.8
-- **状态**: 功能框架已完成，正在进行仿真测试
+- **状态**: 已完成全部功能测试 (36/36 通过)
+
+---
+
+## 快速启动（便携版）
+
+**无需安装 Python，双击即可运行！**
+
+### 在新机器上运行
+
+```cmd
+# 1. 克隆或拉取代码
+git clone https://github.com/ByteBard/CTP.git
+# 或
+git pull
+
+# 2. 双击运行（首次自动解压）
+run_portable.bat
+```
+
+### 运行流程说明
+
+1. `run_portable.bat` 检测 `dist/CTP_Trading_System.zip` 是否存在
+2. 如果 `dist/CTP_Trading_System/` 目录不存在，自动解压 zip 文件
+3. 启动 Web 服务，监听 http://127.0.0.1:8000
+4. 在浏览器中打开该地址即可使用
+
+### 便携版内容
+
+| 文件/目录 | 说明 |
+|-----------|------|
+| `run_portable.bat` | 启动脚本（自动解压+运行） |
+| `build_portable.bat` | 打包脚本（用于重新打包） |
+| `dist/CTP_Trading_System.zip` | 便携版压缩包 (27.4MB) |
+| `dist/CTP_Trading_System/` | 解压后的运行目录（自动生成，不提交到git） |
+
+### 便携版包含
+
+- 内嵌 Python 3.11.9 运行环境
+- 所有依赖包 (openctp-ctp, fastapi, uvicorn, loguru 等)
+- 完整的交易系统代码
+- Web UI 界面
+
+---
+
+## 自动化测试
+
+### 运行全部测试（36项）
+
+```cmd
+# 1. 启动Web服务（使用便携版Python）
+cd dist\CTP_Trading_System
+python\python.exe -m uvicorn ctp_trading_system.web.app:app --host 127.0.0.1 --port 8000
+
+# 2. 新开命令行窗口，运行测试
+cd dist\CTP_Trading_System
+python\python.exe -m pip install pytest pytest-playwright pytest-html
+python\python.exe -m playwright install chromium
+python\python.exe -m pytest ctp_trading_system/tests/test_assessment.py -v
+```
+
+### 测试结果 (2026-01-16)
+
+```
+36 passed in 152.71s (100%)
+```
+
+| 类别 | 评估项 | 测试数 | 结果 |
+|------|--------|--------|------|
+| 接口适应性 | 第1项 | 3 | PASSED |
+| 基础交易 | 第2-4项 | 3 | PASSED |
+| 异常监测 | 第5-10项 | 6 | PASSED |
+| 阈值管理 | 第11-13项 | 8 | PASSED |
+| 错误防范 | 第14-19项 | 6 | PASSED |
+| 应急处置 | 第20,23-24项 | 3 | PASSED |
+| 日志记录 | 第25项 | 7 | PASSED |
+
+---
 
 ## 项目结构
 
 ```
-C:\Repo\CTP\
+CTP/
+├── run_portable.bat               # 便携版启动脚本（首次自动解压）
+├── build_portable.bat             # 便携版打包脚本
+├── dist/
+│   └── CTP_Trading_System.zip     # 便携版压缩包 (27.4MB)
+│
 ├── Sim/                           # 仿真测试目录
 │   ├── sim_login_test.py          # 独立登录测试脚本
 │   ├── sim_test_log.txt           # 测试日志输出
-│   ├── v6.6.8_T1_20220520_winApi/ # Windows CTP API
-│   ├── v6.6.8_T1_20220520_api_tradeapi_linux64/  # Linux CTP API
 │   └── 期货仿真测试.txt            # 仿真账号信息
 │
-├── ctp_trading_system/            # 主项目目录
+├── ctp_trading_system/            # 主项目源代码
 │   ├── main.py                    # 系统主入口
 │   ├── config/settings.py         # 配置管理
 │   ├── core/ctp_gateway.py        # CTP网关
@@ -32,10 +112,11 @@ C:\Repo\CTP\
 │   ├── emergency/emergency_handler.py  # 应急处置
 │   ├── trade_logging/trade_logger.py   # 日志系统
 │   ├── web/                       # Web UI (FastAPI)
-│   ├── tests/test_assessment.py   # 自动化测试
+│   ├── tests/test_assessment.py   # 自动化测试 (36项)
+│   ├── docs/                      # 文档目录
 │   └── logs/                      # 运行日志
 │
-└── claude.md                      # 本文件
+└── CLAUDE.md                      # 本文件
 ```
 
 ## 当前任务
@@ -114,9 +195,15 @@ pip install openctp-ctp pyyaml loguru fastapi uvicorn
 - 检查密码是否正确（身份证后六位）
 - 检查账号是否有效
 
+## 已完成工作
+
+- [x] 完成仿真环境连接测试
+- [x] 验证基础交易功能（开仓/平仓/撤单）
+- [x] 测试监测和预警功能
+- [x] 完成全部36项自动化测试 (100%通过)
+- [x] 创建便携版打包 (无需安装Python)
+
 ## 下一步工作
 
-1. 完成仿真环境连接测试
-2. 验证基础交易功能（开仓/平仓/撤单）
-3. 测试监测和预警功能
-4. 完成全部25项评估测试
+1. 在实盘环境进行验收测试
+2. 根据期货公司要求调整配置参数
