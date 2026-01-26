@@ -70,17 +70,45 @@ async def open_position(request: OrderRequest):
     开仓
     评估表第2项：开仓指令
     """
-    system = get_trading_system()
-    ws = get_ws_manager()
-
-    if not system._running:
-        return OrderResponse(success=False, message="系统未运行")
-
-    if system.emergency_handler.is_trading_paused():
-        await ws.send_log("TRADE", "WARNING", "交易已暂停，无法开仓")
-        return OrderResponse(success=False, message="交易已暂停")
-
     try:
+        system = get_trading_system()
+        ws = get_ws_manager()
+
+        if not system._running:
+            await ws.send_log("TRADE", "WARNING", "系统未运行，无法开仓")
+            return OrderResponse(success=False, message="系统未运行，请先登录")
+
+        if system.emergency_handler.is_trading_paused():
+            await ws.send_log("TRADE", "WARNING", "交易已暂停，无法开仓")
+            return OrderResponse(success=False, message="交易已暂停")
+
+        # 同步账户和持仓信息到验证器（用于资金/持仓验证）
+        try:
+            account = system.gateway.query_account(timeout=2)
+            if account:
+                system.validator.update_account(account)
+            positions = system.gateway.query_position(timeout=2)
+            if positions:
+                system.validator.update_positions(positions)
+        except:
+            pass  # 查询失败不影响主流程
+
+        # 先进行验证，获取详细错误信息
+        direction = '0' if request.direction == "buy" else '1'
+        validation_result = system.validator.validate_order(
+            instrument_id=request.instrument_id,
+            direction=direction,
+            offset='0',  # 开仓
+            price=request.price,
+            volume=request.volume
+        )
+
+        if not validation_result.is_valid:
+            error_msg = validation_result.error_message or "验证失败"
+            await ws.send_log("TRADE", "ERROR", f"❌ 指令验证失败: {error_msg}")
+            await ws.send_alert("ERROR", "指令验证失败", error_msg)
+            return OrderResponse(success=False, message=error_msg)
+
         if request.direction == "buy":
             order_ref = system.open_long(
                 instrument_id=request.instrument_id,
@@ -112,12 +140,16 @@ async def open_position(request: OrderRequest):
                 order_ref=order_ref
             )
         else:
-            await ws.send_log("TRADE", "ERROR", "开仓报单失败")
-            return OrderResponse(success=False, message="报单失败，请检查验证信息")
+            await ws.send_log("TRADE", "ERROR", f"开仓报单失败: {request.instrument_id}")
+            return OrderResponse(success=False, message="报单失败，请检查合约代码和验证信息")
 
     except Exception as e:
-        await ws.send_log("TRADE", "ERROR", f"开仓异常: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        try:
+            ws = get_ws_manager()
+            await ws.send_log("TRADE", "ERROR", f"开仓异常: {str(e)}")
+        except:
+            pass
+        return OrderResponse(success=False, message=f"开仓异常: {str(e)}")
 
 
 @router.post("/close", response_model=OrderResponse)
@@ -138,6 +170,22 @@ async def close_position(request: OrderRequest):
 
     try:
         close_today = request.offset == "close_today"
+
+        # 先进行验证，获取详细错误信息
+        direction = '1' if request.direction == "sell" else '0'
+        validation_result = system.validator.validate_order(
+            instrument_id=request.instrument_id,
+            direction=direction,
+            offset='1',  # 平仓
+            price=request.price,
+            volume=request.volume
+        )
+
+        if not validation_result.is_valid:
+            error_msg = validation_result.error_message or "验证失败"
+            await ws.send_log("TRADE", "ERROR", f"❌ 指令验证失败: {error_msg}")
+            await ws.send_alert("ERROR", "指令验证失败", error_msg)
+            return OrderResponse(success=False, message=error_msg)
 
         if request.direction == "sell":
             # 卖出平仓 = 平多仓
@@ -301,15 +349,20 @@ async def get_orders():
 
     order_list = []
     for order_ref, order in orders.items():
+        # 订单数据是字典格式，使用 .get() 访问
+        direction = order.get('Direction', '0') if isinstance(order, dict) else getattr(order, 'Direction', '0')
+        offset = order.get('CombOffsetFlag', '0') if isinstance(order, dict) else getattr(order, 'CombOffsetFlag', '0')
+        status = order.get('OrderStatus', '') if isinstance(order, dict) else getattr(order, 'OrderStatus', '')
+
         order_list.append({
             "order_ref": order_ref,
-            "instrument_id": getattr(order, 'InstrumentID', ''),
-            "direction": "buy" if getattr(order, 'Direction', '0') == '0' else "sell",
-            "offset": "open" if getattr(order, 'CombOffsetFlag', '0')[0] == '0' else "close",
-            "price": getattr(order, 'LimitPrice', 0),
-            "volume": getattr(order, 'VolumeTotalOriginal', 0),
-            "volume_traded": getattr(order, 'VolumeTraded', 0),
-            "status": _get_order_status(getattr(order, 'OrderStatus', ''))
+            "instrument_id": order.get('InstrumentID', '') if isinstance(order, dict) else getattr(order, 'InstrumentID', ''),
+            "direction": "buy" if direction == '0' else "sell",
+            "offset": "open" if (offset[0] if offset else '0') == '0' else "close",
+            "price": order.get('LimitPrice', 0) if isinstance(order, dict) else getattr(order, 'LimitPrice', 0),
+            "volume": order.get('VolumeTotal', 0) if isinstance(order, dict) else getattr(order, 'VolumeTotalOriginal', 0),
+            "volume_traded": order.get('VolumeTraded', 0) if isinstance(order, dict) else getattr(order, 'VolumeTraded', 0),
+            "status": _get_order_status(status)
         })
 
     return {"orders": order_list}
@@ -326,6 +379,82 @@ async def get_instruments():
         "count": len(instruments),
         "instruments": list(instruments.keys())[:100]  # 只返回前100个
     }
+
+
+@router.get("/market_data/{instrument_id}")
+async def get_market_data(instrument_id: str):
+    """
+    查询合约行情数据
+    返回最新价、涨跌停价等信息
+    """
+    system = get_trading_system()
+
+    if not system._running:
+        return {"success": False, "message": "系统未运行，请先登录"}
+
+    market_data = system.gateway.query_market_data(instrument_id)
+
+    if market_data:
+        return {
+            "success": True,
+            "data": market_data
+        }
+    else:
+        return {
+            "success": False,
+            "message": f"无法获取{instrument_id}的行情数据"
+        }
+
+
+@router.get("/account")
+async def get_account():
+    """
+    查询资金账户
+    返回可用资金、持仓盈亏等
+    """
+    system = get_trading_system()
+
+    if not system._running:
+        return {"success": False, "message": "系统未运行，请先登录"}
+
+    account = system.gateway.query_account(timeout=5)
+
+    if account:
+        return {
+            "success": True,
+            "data": account
+        }
+    else:
+        return {
+            "success": False,
+            "message": "无法获取账户信息"
+        }
+
+
+@router.get("/positions")
+async def get_positions():
+    """
+    查询持仓
+    返回各合约持仓和盈亏
+    """
+    system = get_trading_system()
+
+    if not system._running:
+        return {"success": False, "message": "系统未运行，请先登录"}
+
+    positions = system.gateway.query_position(timeout=5)
+
+    if positions:
+        return {
+            "success": True,
+            "data": positions
+        }
+    else:
+        return {
+            "success": True,
+            "data": {},
+            "message": "无持仓"
+        }
 
 
 def _get_order_status(status: str) -> str:

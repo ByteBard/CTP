@@ -70,6 +70,12 @@
                         </button>
                     </li>
                     <li class="nav-item">
+                        <button class="nav-link" id="strategy-tab" data-bs-toggle="tab"
+                                data-bs-target="#strategy" type="button">
+                            <i class="bi bi-robot"></i> 自动策略
+                        </button>
+                    </li>
+                    <li class="nav-item">
                         <button class="nav-link" id="logs-tab" data-bs-toggle="tab"
                                 data-bs-target="#logs" type="button">
                             <i class="bi bi-journal-text"></i> 日志查看
@@ -598,6 +604,92 @@
                                         <button class="btn btn-lg btn-danger" id="btn-emergency-stop">
                                             <i class="bi bi-stop-circle"></i> 一键紧急停止
                                         </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- ==================== 自动策略页 ==================== -->
+                    <div class="tab-pane fade" id="strategy" role="tabpanel">
+                        <div class="card mt-3">
+                            <div class="card-header">
+                                <i class="bi bi-robot"></i> 自动演示策略 DEMO_AUTO
+                                <span class="badge bg-primary float-end">程序化交易演示</span>
+                            </div>
+                            <div class="card-body">
+                                <div class="alert alert-info">
+                                    <i class="bi bi-info-circle"></i>
+                                    <strong>演示流程：</strong>
+                                    启动策略 → 自动开仓(挂单) → 超时自动撤单 → 重新开仓(成交) → 自动平仓
+                                    <br>
+                                    <small>每个动作间隔约10秒，请注意截图时机</small>
+                                </div>
+
+                                <!-- 策略配置 -->
+                                <div class="row mb-3">
+                                    <div class="col-md-3">
+                                        <label class="form-label">合约代码</label>
+                                        <input type="text" class="form-control" id="strategy-instrument" value="IF2602">
+                                    </div>
+                                    <div class="col-md-2">
+                                        <label class="form-label">数量(手)</label>
+                                        <input type="number" class="form-control" id="strategy-volume" value="1" min="1">
+                                    </div>
+                                    <div class="col-md-2">
+                                        <label class="form-label">开仓超时(秒)</label>
+                                        <input type="number" class="form-control" id="strategy-open-timeout" value="10" min="5">
+                                    </div>
+                                    <div class="col-md-2">
+                                        <label class="form-label">持仓时间(秒)</label>
+                                        <input type="number" class="form-control" id="strategy-hold-duration" value="10" min="5">
+                                    </div>
+                                    <div class="col-md-3">
+                                        <label class="form-label">策略状态</label>
+                                        <div id="strategy-status" class="form-control-plaintext">
+                                            <span class="badge bg-secondary">未启动</span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- 控制按钮 -->
+                                <div class="row mb-3">
+                                    <div class="col-12">
+                                        <button class="btn btn-success btn-lg me-2" id="btn-start-strategy">
+                                            <i class="bi bi-play-circle"></i> 启动策略
+                                        </button>
+                                        <button class="btn btn-danger btn-lg" id="btn-stop-strategy">
+                                            <i class="bi bi-stop-circle"></i> 停止策略
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <!-- 截图提示 -->
+                                <div class="card bg-light">
+                                    <div class="card-header">
+                                        <i class="bi bi-camera"></i> 截图时机提示
+                                    </div>
+                                    <div class="card-body">
+                                        <div class="row">
+                                            <div class="col-md-4">
+                                                <div class="alert alert-success mb-0">
+                                                    <strong>📸 截图1：自动开仓</strong><br>
+                                                    看到 "🟢 【自动开仓】" 日志时截图
+                                                </div>
+                                            </div>
+                                            <div class="col-md-4">
+                                                <div class="alert alert-warning mb-0">
+                                                    <strong>📸 截图2：自动撤单</strong><br>
+                                                    看到 "🟡 【自动撤单】" 日志时截图
+                                                </div>
+                                            </div>
+                                            <div class="col-md-4">
+                                                <div class="alert alert-danger mb-0">
+                                                    <strong>📸 截图3：自动平仓</strong><br>
+                                                    看到 "🔴 【自动平仓】" 日志时截图
+                                                </div>
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
                             </div>

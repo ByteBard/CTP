@@ -65,7 +65,12 @@ const API = {
 
     // 日志
     getLogs: (params) => API.request('GET', '/logs/?' + new URLSearchParams(params)),
-    getRealtimeLogs: () => API.request('GET', '/logs/realtime')
+    getRealtimeLogs: () => API.request('GET', '/logs/realtime'),
+
+    // 策略控制
+    startStrategy: (data) => API.request('POST', '/strategy/start', data),
+    stopStrategy: () => API.request('POST', '/strategy/stop', {}),
+    getStrategyStatus: () => API.request('GET', '/strategy/status')
 };
 
 // ==================== WebSocket管理 ====================
@@ -176,13 +181,6 @@ const WebSocketManager = {
 
 // ==================== UI更新函数 ====================
 function updateConnectionUI(status) {
-    const statusMap = {
-        'connected': { text: '已连接', class: 'connected' },
-        'authenticated': { text: '已认证', class: 'connected' },
-        'logged_in': { text: '已登录', class: 'connected' },
-        'disconnected': { text: '未连接', class: 'disconnected' }
-    };
-
     if (status === 'connected') {
         AppState.connected = true;
         document.getElementById('status-connection').textContent = '已连接';
@@ -199,6 +197,21 @@ function updateConnectionUI(status) {
         document.getElementById('status-indicator-login').className = 'status-indicator connected';
         document.getElementById('system-status').innerHTML = '<i class="bi bi-circle-fill text-success"></i> 已连接';
         document.getElementById('system-status').className = 'badge bg-success';
+    } else if (status === 'disconnected' || status === 'logged_out') {
+        // 重置所有连接状态为断开
+        AppState.connected = false;
+        AppState.authenticated = false;
+        AppState.loggedIn = false;
+        document.getElementById('status-connection').textContent = '未连接';
+        document.getElementById('status-indicator-connection').className = 'status-indicator disconnected';
+        document.getElementById('status-auth').textContent = '未认证';
+        document.getElementById('status-indicator-auth').className = 'status-indicator disconnected';
+        document.getElementById('status-login').textContent = '未登录';
+        document.getElementById('status-indicator-login').className = 'status-indicator disconnected';
+        document.getElementById('system-status').innerHTML = '<i class="bi bi-circle-fill text-danger"></i> 已断开';
+        document.getElementById('system-status').className = 'badge bg-danger';
+        document.getElementById('btn-authenticate').disabled = true;
+        document.getElementById('btn-login').disabled = true;
     }
 }
 
@@ -299,10 +312,34 @@ function getOrderStatusText(status) {
     return statusMap[status] || status;
 }
 
+// ==================== 初始化检查 ====================
+async function checkAndRestoreSession() {
+    try {
+        const status = await API.getConnectionStatus();
+        if (status.logged_in) {
+            updateConnectionUI('connected');
+            updateConnectionUI('authenticated');
+            updateConnectionUI('logged_in');
+            WebSocketManager.addRealtimeLog('SYSTEM', 'INFO', '检测到已登录会话，自动恢复');
+            refreshOrders();
+        } else if (status.authenticated) {
+            updateConnectionUI('connected');
+            updateConnectionUI('authenticated');
+        } else if (status.connected) {
+            updateConnectionUI('connected');
+        }
+    } catch (error) {
+        console.log('检查会话状态失败:', error);
+    }
+}
+
 // ==================== 事件绑定 ====================
 document.addEventListener('DOMContentLoaded', function() {
     // 初始化WebSocket
     WebSocketManager.connect();
+
+    // 检查并恢复已有会话
+    checkAndRestoreSession();
 
     // ===== 连接登录 =====
     document.getElementById('btn-connect').addEventListener('click', async () => {
@@ -540,6 +577,68 @@ document.addEventListener('DOMContentLoaded', function() {
             });
         }
     }
+
+    // ===== 策略控制 =====
+    document.getElementById('btn-start-strategy').addEventListener('click', async () => {
+        const config = {
+            instrument_id: document.getElementById('strategy-instrument').value,
+            volume: parseInt(document.getElementById('strategy-volume').value),
+            open_timeout: parseInt(document.getElementById('strategy-open-timeout').value),
+            hold_duration: parseInt(document.getElementById('strategy-hold-duration').value)
+        };
+
+        try {
+            document.getElementById('strategy-status').innerHTML = '<span class="badge bg-warning">启动中...</span>';
+            const result = await API.startStrategy(config);
+            if (result.success) {
+                document.getElementById('strategy-status').innerHTML = '<span class="badge bg-success">运行中</span>';
+                WebSocketManager.addRealtimeLog('STRATEGY', 'INFO', '策略启动成功');
+            } else {
+                document.getElementById('strategy-status').innerHTML = '<span class="badge bg-danger">启动失败</span>';
+                WebSocketManager.addRealtimeLog('STRATEGY', 'ERROR', result.message || '策略启动失败');
+            }
+        } catch (error) {
+            document.getElementById('strategy-status').innerHTML = '<span class="badge bg-danger">错误</span>';
+            WebSocketManager.addRealtimeLog('STRATEGY', 'ERROR', '策略启动异常: ' + error.message);
+        }
+    });
+
+    document.getElementById('btn-stop-strategy').addEventListener('click', async () => {
+        try {
+            const result = await API.stopStrategy();
+            if (result.success) {
+                document.getElementById('strategy-status').innerHTML = '<span class="badge bg-secondary">已停止</span>';
+                WebSocketManager.addRealtimeLog('STRATEGY', 'INFO', '策略已停止');
+            }
+        } catch (error) {
+            WebSocketManager.addRealtimeLog('STRATEGY', 'ERROR', '停止策略异常: ' + error.message);
+        }
+    });
+
+    // 定时更新策略状态
+    setInterval(async () => {
+        try {
+            const result = await API.getStrategyStatus();
+            if (result.data) {
+                const state = result.data.state;
+                let badgeClass = 'bg-secondary';
+                let stateText = '未启动';
+
+                switch(state) {
+                    case 'running': badgeClass = 'bg-success'; stateText = '运行中'; break;
+                    case 'waiting_open': badgeClass = 'bg-info'; stateText = '等待开仓'; break;
+                    case 'waiting_cancel': badgeClass = 'bg-warning'; stateText = '等待撤单'; break;
+                    case 'holding': badgeClass = 'bg-primary'; stateText = '持仓中'; break;
+                    case 'waiting_close': badgeClass = 'bg-info'; stateText = '等待平仓'; break;
+                    case 'completed': badgeClass = 'bg-success'; stateText = '已完成'; break;
+                    case 'stopped': badgeClass = 'bg-secondary'; stateText = '已停止'; break;
+                }
+                document.getElementById('strategy-status').innerHTML = `<span class="badge ${badgeClass}">${stateText}</span>`;
+            }
+        } catch (error) {
+            // 忽略状态更新错误
+        }
+    }, 2000);
 
     // ===== 定时刷新 =====
     setInterval(async () => {
