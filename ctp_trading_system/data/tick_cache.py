@@ -85,6 +85,10 @@ class TickCache:
         """当前缓存大小"""
         return len(self._buffer)
 
+    def __len__(self) -> int:
+        """返回缓存大小"""
+        return len(self._buffer)
+
     def get_ticks(self) -> List[TickData]:
         """获取所有缓存的tick"""
         return list(self._buffer)

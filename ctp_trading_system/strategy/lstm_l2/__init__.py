@@ -8,6 +8,6 @@ LSTM L2策略模块
 
 from .lstm_strategy import LSTML2Strategy, LSTMConfig
 from .feature_engine import FeatureEngine
-from .position_manager import PositionManager, PositionState
+from .position_manager import PositionManager, PositionConfig, PositionState
 
-__all__ = ['LSTML2Strategy', 'LSTMConfig', 'FeatureEngine', 'PositionManager', 'PositionState']
+__all__ = ['LSTML2Strategy', 'LSTMConfig', 'FeatureEngine', 'PositionManager', 'PositionConfig', 'PositionState']
