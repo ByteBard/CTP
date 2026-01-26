@@ -1,8 +1,8 @@
 # CTP Trading System Dependencies
 # 符合 T/ZQX 0004-2025 期货程序化交易系统功能测试指引
 
-# CTP API Python封装
-openctp-ctp>=6.7.7
+# CTP API - 使用官方 v6.6.8 API (通过 ctp_wrapper.dll)
+# 不再使用 openctp-ctp，使用 ctp_api 模块调用官方 dll
 
 # 配置管理
 pyyaml>=6.0
@@ -32,6 +32,16 @@ python-multipart>=0.0.6
 
 # WebSocket
 websockets>=12.0
+
+# ==================== Strategy Dependencies ====================
+# 数值计算
+numpy>=1.19.0
+
+# 深度学习 (LSTM策略)
+torch>=1.9.0
+
+# 机器学习工具 (特征标准化)
+scikit-learn>=0.24.0
 
 # ==================== Testing ====================
 # 测试框架
