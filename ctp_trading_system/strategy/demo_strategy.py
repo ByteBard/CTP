@@ -9,6 +9,8 @@ from typing import Optional, Callable
 from dataclasses import dataclass
 from datetime import datetime
 
+from ctp_trading_system.core.ctp_gateway import Direction
+
 
 class StrategyState(Enum):
     """策略状态"""
@@ -119,9 +121,9 @@ class DemoAutoStrategy:
         self._demo_phase = 0
         self._update_state(StrategyState.RUNNING)
 
-        self._log(f"🤖 策略 DEMO_AUTO 启动")
-        self._log(f"📋 配置: 合约={self.config.instrument_id}, 数量={self.config.volume}手")
-        self._log(f"⏱️ 开仓超时={self.config.open_timeout}秒, 持仓时间={self.config.hold_duration}秒")
+        self._log(f"[AUTO] 策略 DEMO_AUTO 启动")
+        self._log(f"[CONFIG] 合约={self.config.instrument_id}, 数量={self.config.volume}手")
+        self._log(f"[CONFIG] 开仓超时={self.config.open_timeout}秒, 持仓时间={self.config.hold_duration}秒")
 
         # 启动策略线程
         self._thread = threading.Thread(target=self._run_strategy, daemon=True)
@@ -133,17 +135,17 @@ class DemoAutoStrategy:
         """停止策略"""
         self._running = False
         self._update_state(StrategyState.STOPPED)
-        self._log("🛑 策略已停止")
+        self._log("[STOP] 策略已停止")
 
     def _run_strategy(self):
         """策略主循环"""
         try:
             # 第1步：获取行情
-            self._log(f"📊 正在获取 {self.config.instrument_id} 行情...")
+            self._log(f"[QUOTE] 正在获取 {self.config.instrument_id} 行情...")
             market_data = self.system.gateway.query_market_data(self.config.instrument_id)
 
             if not market_data:
-                self._log("❌ 获取行情失败，策略终止")
+                self._log("[ERROR] 获取行情失败，策略终止")
                 self._update_state(StrategyState.STOPPED)
                 return
 
@@ -151,7 +153,7 @@ class DemoAutoStrategy:
             upper_limit = market_data.get('upper_limit', 0)
             lower_limit = market_data.get('lower_limit', 0)
 
-            self._log(f"📊 行情: 最新价={self._last_price}, 涨停={upper_limit}, 跌停={lower_limit}")
+            self._log(f"[QUOTE] 行情: 最新价={self._last_price}, 涨停={upper_limit}, 跌停={lower_limit}")
 
             time.sleep(2)  # 等待2秒让用户看到
 
@@ -162,14 +164,14 @@ class DemoAutoStrategy:
             self._demo_phase = 1
             open_price = self._last_price - self.config.price_offset  # 低于市价，不会成交
             self._log(f"{'='*50}")
-            self._log(f"🟢 【自动开仓】策略触发开仓信号")
-            self._log(f"🟢 合约={self.config.instrument_id}, 方向=买, 数量={self.config.volume}手")
-            self._log(f"🟢 价格={open_price}（低于市价{self.config.price_offset}点，预期不成交）")
+            self._log(f"[OPEN] === 自动开仓 === 策略触发开仓信号")
+            self._log(f"[OPEN] 合约={self.config.instrument_id}, 方向=买, 数量={self.config.volume}手")
+            self._log(f"[OPEN] 价格={open_price} (低于市价{self.config.price_offset}点，预期不成交)")
 
             self._update_state(StrategyState.WAITING_OPEN)
             order_ref = self.system.gateway.open_position(
                 self.config.instrument_id,
-                direction=self.system.gateway.Direction.BUY,
+                direction=Direction.BUY,
                 price=open_price,
                 volume=self.config.volume
             )
@@ -177,22 +179,22 @@ class DemoAutoStrategy:
             if order_ref:
                 self._current_order_ref = order_ref
                 self._open_time = datetime.now()
-                self._log(f"✅ 开仓订单已提交，订单号={order_ref}")
-                self._log(f"📸 【截图时机1】自动开仓已触发")
+                self._log(f"[OK] 开仓订单已提交，订单号={order_ref}")
+                self._log(f"[SCREENSHOT 1] 自动开仓已触发")
             else:
-                self._log("❌ 开仓失败")
+                self._log("[ERROR] 开仓失败")
                 self._update_state(StrategyState.STOPPED)
                 return
 
             # 等待开仓超时
-            self._log(f"⏳ 等待 {self.config.open_timeout} 秒...")
+            self._log(f"[WAIT] 等待 {self.config.open_timeout} 秒...")
             for i in range(self.config.open_timeout):
                 if not self._running:
                     return
                 time.sleep(1)
                 remaining = self.config.open_timeout - i - 1
                 if remaining > 0 and remaining % 3 == 0:
-                    self._log(f"⏳ 剩余 {remaining} 秒触发撤单...")
+                    self._log(f"[WAIT] 剩余 {remaining} 秒触发撤单...")
 
             if not self._running:
                 return
@@ -200,8 +202,8 @@ class DemoAutoStrategy:
             # 第3步：自动撤单
             self._demo_phase = 2
             self._log(f"{'='*50}")
-            self._log(f"🟡 【自动撤单】挂单超时 {self.config.open_timeout} 秒未成交")
-            self._log(f"🟡 策略触发自动撤单信号")
+            self._log(f"[CANCEL] === 自动撤单 === 挂单超时 {self.config.open_timeout} 秒未成交")
+            self._log(f"[CANCEL] 策略触发自动撤单信号")
 
             self._update_state(StrategyState.WAITING_CANCEL)
             success = self.system.gateway.cancel_order(
@@ -210,10 +212,10 @@ class DemoAutoStrategy:
             )
 
             if success:
-                self._log(f"✅ 撤单请求已发送，订单号={self._current_order_ref}")
-                self._log(f"📸 【截图时机2】自动撤单已触发")
+                self._log(f"[OK] 撤单请求已发送，订单号={self._current_order_ref}")
+                self._log(f"[SCREENSHOT 2] 自动撤单已触发")
             else:
-                self._log("⚠️ 撤单请求失败（可能已成交）")
+                self._log("[WARN] 撤单请求失败（可能已成交）")
 
             time.sleep(3)  # 等待撤单确认
 
@@ -225,23 +227,23 @@ class DemoAutoStrategy:
             # 使用涨停价确保成交
             open_price_2 = upper_limit if upper_limit > 0 else self._last_price + 10
             self._log(f"{'='*50}")
-            self._log(f"🟢 【自动开仓】策略重新触发开仓信号")
-            self._log(f"🟢 合约={self.config.instrument_id}, 方向=买, 数量={self.config.volume}手")
-            self._log(f"🟢 价格={open_price_2}（涨停价，确保成交）")
+            self._log(f"[OPEN] === 自动开仓 === 策略重新触发开仓信号")
+            self._log(f"[OPEN] 合约={self.config.instrument_id}, 方向=买, 数量={self.config.volume}手")
+            self._log(f"[OPEN] 价格={open_price_2} (涨停价，确保成交)")
 
             self._update_state(StrategyState.WAITING_OPEN)
             order_ref_2 = self.system.gateway.open_position(
                 self.config.instrument_id,
-                direction=self.system.gateway.Direction.BUY,
+                direction=Direction.BUY,
                 price=open_price_2,
                 volume=self.config.volume
             )
 
             if order_ref_2:
                 self._current_order_ref = order_ref_2
-                self._log(f"✅ 开仓订单已提交，订单号={order_ref_2}")
+                self._log(f"[OK] 开仓订单已提交，订单号={order_ref_2}")
             else:
-                self._log("❌ 开仓失败，策略终止")
+                self._log("[ERROR] 开仓失败，策略终止")
                 self._update_state(StrategyState.STOPPED)
                 return
 
@@ -249,17 +251,17 @@ class DemoAutoStrategy:
 
             self._update_state(StrategyState.HOLDING)
             self._hold_time = datetime.now()
-            self._log(f"✅ 开仓成交，开始持仓计时")
+            self._log(f"[OK] 开仓成交，开始持仓计时")
 
             # 等待持仓时间
-            self._log(f"⏳ 持仓等待 {self.config.hold_duration} 秒后自动平仓...")
+            self._log(f"[WAIT] 持仓等待 {self.config.hold_duration} 秒后自动平仓...")
             for i in range(self.config.hold_duration):
                 if not self._running:
                     return
                 time.sleep(1)
                 remaining = self.config.hold_duration - i - 1
                 if remaining > 0 and remaining % 3 == 0:
-                    self._log(f"⏳ 剩余 {remaining} 秒触发平仓...")
+                    self._log(f"[WAIT] 剩余 {remaining} 秒触发平仓...")
 
             if not self._running:
                 return
@@ -269,37 +271,37 @@ class DemoAutoStrategy:
             # 使用跌停价确保成交
             close_price = lower_limit if lower_limit > 0 else self._last_price - 10
             self._log(f"{'='*50}")
-            self._log(f"🔴 【自动平仓】持仓超过 {self.config.hold_duration} 秒")
-            self._log(f"🔴 策略触发自动平仓信号")
-            self._log(f"🔴 合约={self.config.instrument_id}, 方向=卖, 数量={self.config.volume}手")
-            self._log(f"🔴 价格={close_price}（跌停价，确保成交）")
+            self._log(f"[CLOSE] === 自动平仓 === 持仓超过 {self.config.hold_duration} 秒")
+            self._log(f"[CLOSE] 策略触发自动平仓信号")
+            self._log(f"[CLOSE] 合约={self.config.instrument_id}, 方向=卖, 数量={self.config.volume}手")
+            self._log(f"[CLOSE] 价格={close_price} (跌停价，确保成交)")
 
             self._update_state(StrategyState.WAITING_CLOSE)
             order_ref_3 = self.system.gateway.close_position(
                 self.config.instrument_id,
-                direction=self.system.gateway.Direction.SELL,
+                direction=Direction.SELL,
                 price=close_price,
                 volume=self.config.volume,
                 close_today=True
             )
 
             if order_ref_3:
-                self._log(f"✅ 平仓订单已提交，订单号={order_ref_3}")
-                self._log(f"📸 【截图时机3】自动平仓已触发")
+                self._log(f"[OK] 平仓订单已提交，订单号={order_ref_3}")
+                self._log(f"[SCREENSHOT 3] 自动平仓已触发")
             else:
-                self._log("❌ 平仓失败")
+                self._log("[ERROR] 平仓失败")
 
             time.sleep(3)  # 等待成交
 
             # 完成
             self._update_state(StrategyState.COMPLETED)
             self._log(f"{'='*50}")
-            self._log(f"🎉 策略演示完成！")
-            self._log(f"📸 请确认已截图：自动开仓、自动撤单、自动平仓")
+            self._log(f"[DONE] 策略演示完成!")
+            self._log(f"[INFO] 请确认已截图: 自动开仓、自动撤单、自动平仓")
             self._running = False
 
         except Exception as e:
-            self._log(f"❌ 策略异常: {str(e)}")
+            self._log(f"[ERROR] 策略异常: {str(e)}")
             self._update_state(StrategyState.STOPPED)
             self._running = False
 
