@@ -5,7 +5,7 @@
 
 原始回测结果:
 - H1e Tick: +13,706% (16个月, 67,926笔交易, 95.6%胜率)
-- LSTM L2: +2,618% (16个月, 1,340笔交易, 84.5%胜率)
+- LSTM L2: +2,445.70% (16个月, 2,144笔交易, ~84%胜率) [2026-01-27更新]
 
 数据来源:
 - H1e: experiments/tick_timeframe_test.py (H1e_止损_0.7配置)
@@ -285,13 +285,14 @@ class TestExpectedReturns:
                 'source': 'tick_timeframe_test.py, H1e_stop_0.7 config'
             },
             'LSTM_L2': {
-                'compound_return': '+2,618%',
+                'compound_return': '+2,445.70%',
                 'simple_return': '+372%',
-                'total_trades': 1340,
-                'win_rate': 84.5,
+                'total_trades': 2144,
+                'win_rate': 84.0,
                 'test_period': '202407-202510 (16 months)',
                 'features': '--iceberg --large-order --volatility',
-                'source': 'L2slippage_backtest.py'
+                'source': 'L2slippage_backtest.py',
+                'updated': '2026-01-27 model cache refresh'
             }
         }
 
