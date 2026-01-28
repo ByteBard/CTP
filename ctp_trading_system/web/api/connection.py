@@ -6,8 +6,7 @@ from typing import Optional
 from pydantic import BaseModel
 from fastapi import APIRouter, HTTPException
 
-from ..app import get_trading_system
-from ..websocket import get_ws_manager
+from ..app import get_trading_system, queue_log
 
 router = APIRouter()
 
@@ -43,13 +42,13 @@ class ConnectionResponse(BaseModel):
 # ==================== API端点 ====================
 
 @router.post("/connect", response_model=ConnectionResponse)
-async def connect(request: ConnectRequest):
+def connect(request: ConnectRequest):
     """
     连接CTP服务器
     评估表第1项：连通性
+    注意：使用 def（同步）以避免GIL死锁
     """
     system = get_trading_system()
-    ws = get_ws_manager()
 
     try:
         # 更新配置
@@ -60,30 +59,28 @@ async def connect(request: ConnectRequest):
         success = system.gateway.connect(timeout=30)
 
         if success:
-            await ws.send_log("SYSTEM", "INFO", "CTP服务器连接成功")
-            await ws.send_status("connection", {"status": "connected"})
+            queue_log("SYSTEM", "INFO", "CTP服务器连接成功")
             return ConnectionResponse(
                 success=True,
                 message="连接成功",
                 data={"broker_id": request.broker_id, "trade_front": request.trade_front}
             )
         else:
-            await ws.send_log("SYSTEM", "ERROR", "CTP服务器连接失败")
+            queue_log("SYSTEM", "ERROR", "CTP服务器连接失败")
             return ConnectionResponse(success=False, message="连接失败")
 
     except Exception as e:
-        await ws.send_log("SYSTEM", "ERROR", f"连接异常: {str(e)}")
+        queue_log("SYSTEM", "ERROR", f"连接异常: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.post("/authenticate", response_model=ConnectionResponse)
-async def authenticate(request: AuthenticateRequest):
+def authenticate(request: AuthenticateRequest):
     """
     客户端认证
     评估表第1项：认证功能
     """
     system = get_trading_system()
-    ws = get_ws_manager()
 
     try:
         # 更新认证信息
@@ -97,26 +94,24 @@ async def authenticate(request: AuthenticateRequest):
         success = system.gateway.authenticate(timeout=10)
 
         if success:
-            await ws.send_log("SYSTEM", "INFO", "客户端认证成功")
-            await ws.send_status("connection", {"status": "authenticated"})
+            queue_log("SYSTEM", "INFO", "客户端认证成功")
             return ConnectionResponse(success=True, message="认证成功")
         else:
-            await ws.send_log("SYSTEM", "ERROR", "客户端认证失败")
+            queue_log("SYSTEM", "ERROR", "客户端认证失败")
             return ConnectionResponse(success=False, message="认证失败")
 
     except Exception as e:
-        await ws.send_log("SYSTEM", "ERROR", f"认证异常: {str(e)}")
+        queue_log("SYSTEM", "ERROR", f"认证异常: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.post("/login", response_model=ConnectionResponse)
-async def login(request: LoginRequest):
+def login(request: LoginRequest):
     """
     用户登录
     评估表第1项：登录系统
     """
     system = get_trading_system()
-    ws = get_ws_manager()
 
     try:
         # 更新登录信息
@@ -138,32 +133,29 @@ async def login(request: LoginRequest):
             system.connection_monitor.start()
             system._running = True
 
-            await ws.send_log("SYSTEM", "INFO", f"用户 {request.investor_id} 登录成功")
-            await ws.send_status("connection", {"status": "logged_in"})
+            queue_log("SYSTEM", "INFO", f"用户 {request.investor_id} 登录成功")
             return ConnectionResponse(
                 success=True,
                 message="登录成功",
                 data={"investor_id": request.investor_id, "instruments_count": len(instruments)}
             )
         else:
-            await ws.send_log("SYSTEM", "ERROR", "用户登录失败")
+            queue_log("SYSTEM", "ERROR", "用户登录失败")
             return ConnectionResponse(success=False, message="登录失败")
 
     except Exception as e:
-        await ws.send_log("SYSTEM", "ERROR", f"登录异常: {str(e)}")
+        queue_log("SYSTEM", "ERROR", f"登录异常: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.post("/logout", response_model=ConnectionResponse)
-async def logout():
+def logout():
     """登出"""
     system = get_trading_system()
-    ws = get_ws_manager()
 
     try:
         system.stop()
-        await ws.send_log("SYSTEM", "INFO", "已登出")
-        await ws.send_status("connection", {"status": "disconnected"})
+        queue_log("SYSTEM", "INFO", "已登出")
         return ConnectionResponse(success=True, message="已登出")
 
     except Exception as e:
@@ -171,7 +163,7 @@ async def logout():
 
 
 @router.get("/status")
-async def get_status():
+def get_status():
     """获取连接状态"""
     system = get_trading_system()
 

@@ -70,8 +70,8 @@ class OrderMonitor:
         self._order_callbacks: List[Callable] = []
         self._threshold_callbacks: List[Callable] = []
 
-        # 锁
-        self._lock = threading.Lock()
+        # 锁（使用RLock允许同一线程多次获取，避免回调死锁）
+        self._lock = threading.RLock()
 
         self.logger.log_system("报单监测器初始化完成")
 

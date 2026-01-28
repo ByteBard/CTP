@@ -49,7 +49,7 @@ class ConnectionMonitor:
 
     def __init__(self, gateway: CtpGateway,
                  reconnect_interval: int = 5,
-                 max_reconnect_attempts: int = 10,
+                 max_reconnect_attempts: int = 0,
                  heartbeat_interval: int = 30):
         """
         初始化连接监测器
@@ -57,7 +57,7 @@ class ConnectionMonitor:
         Args:
             gateway: CTP网关实例
             reconnect_interval: 重连间隔（秒）
-            max_reconnect_attempts: 最大重连次数
+            max_reconnect_attempts: 最大重连次数（0表示无限重连）
             heartbeat_interval: 心跳检测间隔（秒）
         """
         self.gateway = gateway
@@ -157,7 +157,8 @@ class ConnectionMonitor:
 
     def _trigger_reconnect(self):
         """触发重连"""
-        if self._reconnect_count >= self.max_reconnect_attempts:
+        # max_reconnect_attempts <= 0 表示无限重连
+        if self.max_reconnect_attempts > 0 and self._reconnect_count >= self.max_reconnect_attempts:
             self.logger.log_error("达到最大重连次数，停止重连",
                                   error_msg=f"已尝试{self._reconnect_count}次")
             self._set_state(ConnectionState.ERROR, "达到最大重连次数")
@@ -172,10 +173,12 @@ class ConnectionMonitor:
 
     def _do_reconnect(self):
         """执行重连"""
-        self.logger.log_system("开始重连", {
-            "attempt": self._reconnect_count,
-            "max_attempts": self.max_reconnect_attempts
-        })
+        log_data = {"attempt": self._reconnect_count}
+        if self.max_reconnect_attempts > 0:
+            log_data["max_attempts"] = self.max_reconnect_attempts
+        else:
+            log_data["mode"] = "unlimited"
+        self.logger.log_system("开始重连", log_data)
 
         # 等待一段时间
         time.sleep(self.reconnect_interval)

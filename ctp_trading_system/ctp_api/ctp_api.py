@@ -151,7 +151,10 @@ class OrderStatus:
             ord('b'): "尚未触发",
             ord('c'): "已触发",
         }
-        return status_map.get(status, f"未知({chr(status)})")
+        # 处理bytes类型（DLL回调可能传递bytes）
+        if isinstance(status, bytes):
+            status = status[0] if status else 0
+        return status_map.get(status, f"未知({chr(status) if isinstance(status, int) else status})")
 
 
 # 持仓多空方向
@@ -291,6 +294,41 @@ OnRspQryInstrumentCommissionRateCallback = CFUNCTYPE(
     c_double, c_double, c_double, c_double, c_double, c_double,
     c_int, c_char_p, c_int, c_int)
 
+# 扩展查询回调
+OnRspQryExchangeCallback = CFUNCTYPE(
+    None, c_char_p, c_char_p,
+    c_int, c_char_p, c_int, c_int)
+
+OnRspQryProductCallback = CFUNCTYPE(
+    None, c_char_p, c_char_p, c_char_p, c_int,
+    c_int, c_double,
+    c_int, c_char_p, c_int, c_int)
+
+OnRspQryInvestorPositionDetailCallback = CFUNCTYPE(
+    None, c_char_p, c_char_p, c_char_p, c_char_p,
+    c_char, c_char_p, c_char_p, c_int,
+    c_double, c_double, c_double, c_double,
+    c_char_p,
+    c_int, c_char_p, c_int, c_int)
+
+OnRspQryInvestorCallback = CFUNCTYPE(
+    None, c_char_p, c_char_p, c_char_p, c_char_p,
+    c_int,
+    c_int, c_char_p, c_int, c_int)
+
+OnRspQryTradingCodeCallback = CFUNCTYPE(
+    None, c_char_p, c_char_p, c_char_p, c_char_p,
+    c_int,
+    c_int, c_char_p, c_int, c_int)
+
+OnRspQryInstrumentOrderCommRateCallback = CFUNCTYPE(
+    None, c_char_p, c_char_p, c_char_p,
+    c_double, c_double, c_char_p,
+    c_int, c_char_p, c_int, c_int)
+
+OnRtnInstrumentStatusCallback = CFUNCTYPE(
+    None, c_char_p, c_char_p, c_int, c_char_p, c_int)
+
 
 # ============================================================
 # 回调结构体
@@ -327,6 +365,14 @@ class TraderCallbacks(Structure):
         ("on_rsp_qry_depth_market_data", OnRspQryDepthMarketDataCallback),
         ("on_rsp_qry_instrument_margin_rate", OnRspQryInstrumentMarginRateCallback),
         ("on_rsp_qry_instrument_commission_rate", OnRspQryInstrumentCommissionRateCallback),
+        # 扩展查询响应
+        ("on_rsp_qry_exchange", OnRspQryExchangeCallback),
+        ("on_rsp_qry_product", OnRspQryProductCallback),
+        ("on_rsp_qry_investor_position_detail", OnRspQryInvestorPositionDetailCallback),
+        ("on_rsp_qry_investor", OnRspQryInvestorCallback),
+        ("on_rsp_qry_trading_code", OnRspQryTradingCodeCallback),
+        ("on_rsp_qry_instrument_order_comm_rate", OnRspQryInstrumentOrderCommRateCallback),
+        ("on_rtn_instrument_status", OnRtnInstrumentStatusCallback),
     ]
 
 
@@ -393,6 +439,15 @@ class CTPTraderApi:
         self.on_rsp_qry_depth_market_data: Optional[Callable] = None
         self.on_rsp_qry_instrument_margin_rate: Optional[Callable] = None
         self.on_rsp_qry_instrument_commission_rate: Optional[Callable] = None
+
+        # 扩展查询响应
+        self.on_rsp_qry_exchange: Optional[Callable] = None
+        self.on_rsp_qry_product: Optional[Callable] = None
+        self.on_rsp_qry_investor_position_detail: Optional[Callable] = None
+        self.on_rsp_qry_investor: Optional[Callable] = None
+        self.on_rsp_qry_trading_code: Optional[Callable] = None
+        self.on_rsp_qry_instrument_order_comm_rate: Optional[Callable] = None
+        self.on_rtn_instrument_status: Optional[Callable] = None
 
         # 加载DLL
         self._load_dll(dll_path)
@@ -529,6 +584,31 @@ class CTPTraderApi:
         self._dll.ReqQryInstrumentCommissionRate.argtypes = [
             c_void_p, c_char_p, c_char_p, c_char_p, c_int]
         self._dll.ReqQryInstrumentCommissionRate.restype = c_int
+
+        # ========== 扩展查询 ==========
+        self._dll.ReqQryExchange.argtypes = [
+            c_void_p, c_char_p, c_int]
+        self._dll.ReqQryExchange.restype = c_int
+
+        self._dll.ReqQryProduct.argtypes = [
+            c_void_p, c_char_p, c_char_p, c_int]
+        self._dll.ReqQryProduct.restype = c_int
+
+        self._dll.ReqQryInvestorPositionDetail.argtypes = [
+            c_void_p, c_char_p, c_char_p, c_char_p, c_int]
+        self._dll.ReqQryInvestorPositionDetail.restype = c_int
+
+        self._dll.ReqQryInvestor.argtypes = [
+            c_void_p, c_char_p, c_char_p, c_int]
+        self._dll.ReqQryInvestor.restype = c_int
+
+        self._dll.ReqQryTradingCode.argtypes = [
+            c_void_p, c_char_p, c_char_p, c_int]
+        self._dll.ReqQryTradingCode.restype = c_int
+
+        self._dll.ReqQryInstrumentOrderCommRate.argtypes = [
+            c_void_p, c_char_p, c_char_p, c_char_p, c_int]
+        self._dll.ReqQryInstrumentOrderCommRate.restype = c_int
 
     def _decode(self, s) -> str:
         """解码GBK字符串"""
@@ -948,6 +1028,103 @@ class CTPTraderApi:
                     close_today_ratio_by_money, close_today_ratio_by_volume,
                     error_id, error_msg, request_id, bool(is_last))
 
+        # ========== 扩展查询响应 ==========
+        def _on_rsp_qry_exchange(exchange_id, exchange_name,
+                                  error_id, error_msg, request_id, is_last):
+            exchange_id = self._decode(exchange_id)
+            exchange_name = self._decode(exchange_name)
+            error_msg = self._decode(error_msg)
+            if self.on_rsp_qry_exchange:
+                self.on_rsp_qry_exchange(
+                    exchange_id, exchange_name,
+                    error_id, error_msg, request_id, bool(is_last))
+
+        def _on_rsp_qry_product(product_id, product_name, exchange_id, product_class,
+                                 volume_multiple, price_tick,
+                                 error_id, error_msg, request_id, is_last):
+            product_id = self._decode(product_id)
+            product_name = self._decode(product_name)
+            exchange_id = self._decode(exchange_id)
+            error_msg = self._decode(error_msg)
+            if self.on_rsp_qry_product:
+                self.on_rsp_qry_product(
+                    product_id, product_name, exchange_id, product_class,
+                    volume_multiple, price_tick,
+                    error_id, error_msg, request_id, bool(is_last))
+
+        def _on_rsp_qry_investor_position_detail(broker_id, investor_id, instrument_id, exchange_id,
+                                                   direction, open_date, trade_id, volume,
+                                                   open_price, margin, close_profit, position_profit,
+                                                   trading_day,
+                                                   error_id, error_msg, request_id, is_last):
+            broker_id = self._decode(broker_id)
+            investor_id = self._decode(investor_id)
+            instrument_id = self._decode(instrument_id)
+            exchange_id = self._decode(exchange_id)
+            open_date = self._decode(open_date)
+            trade_id = self._decode(trade_id)
+            trading_day = self._decode(trading_day)
+            error_msg = self._decode(error_msg)
+            if self.on_rsp_qry_investor_position_detail:
+                self.on_rsp_qry_investor_position_detail(
+                    broker_id, investor_id, instrument_id, exchange_id,
+                    direction, open_date, trade_id, volume,
+                    open_price, margin, close_profit, position_profit,
+                    trading_day,
+                    error_id, error_msg, request_id, bool(is_last))
+
+        def _on_rsp_qry_investor(broker_id, investor_id, investor_name, id_card_no,
+                                  investor_type,
+                                  error_id, error_msg, request_id, is_last):
+            broker_id = self._decode(broker_id)
+            investor_id = self._decode(investor_id)
+            investor_name = self._decode(investor_name)
+            id_card_no = self._decode(id_card_no)
+            error_msg = self._decode(error_msg)
+            if self.on_rsp_qry_investor:
+                self.on_rsp_qry_investor(
+                    broker_id, investor_id, investor_name, id_card_no,
+                    investor_type,
+                    error_id, error_msg, request_id, bool(is_last))
+
+        def _on_rsp_qry_trading_code(broker_id, investor_id, exchange_id, client_id,
+                                      client_id_type,
+                                      error_id, error_msg, request_id, is_last):
+            broker_id = self._decode(broker_id)
+            investor_id = self._decode(investor_id)
+            exchange_id = self._decode(exchange_id)
+            client_id = self._decode(client_id)
+            error_msg = self._decode(error_msg)
+            if self.on_rsp_qry_trading_code:
+                self.on_rsp_qry_trading_code(
+                    broker_id, investor_id, exchange_id, client_id,
+                    client_id_type,
+                    error_id, error_msg, request_id, bool(is_last))
+
+        def _on_rsp_qry_instrument_order_comm_rate(broker_id, investor_id, instrument_id,
+                                                     order_comm, action_comm, exchange_id,
+                                                     error_id, error_msg, request_id, is_last):
+            broker_id = self._decode(broker_id)
+            investor_id = self._decode(investor_id)
+            instrument_id = self._decode(instrument_id)
+            exchange_id = self._decode(exchange_id)
+            error_msg = self._decode(error_msg)
+            if self.on_rsp_qry_instrument_order_comm_rate:
+                self.on_rsp_qry_instrument_order_comm_rate(
+                    broker_id, investor_id, instrument_id,
+                    order_comm, action_comm, exchange_id,
+                    error_id, error_msg, request_id, bool(is_last))
+
+        def _on_rtn_instrument_status(exchange_id, instrument_id, instrument_status,
+                                       enter_time, enter_reason):
+            exchange_id = self._decode(exchange_id)
+            instrument_id = self._decode(instrument_id)
+            enter_time = self._decode(enter_time)
+            if self.on_rtn_instrument_status:
+                self.on_rtn_instrument_status(
+                    exchange_id, instrument_id, instrument_status,
+                    enter_time, enter_reason)
+
         # ========== 创建回调对象并保持引用 ==========
         callbacks = [
             OnFrontConnectedCallback(_on_front_connected),
@@ -974,6 +1151,13 @@ class CTPTraderApi:
             OnRspQryDepthMarketDataCallback(_on_rsp_qry_depth_market_data),
             OnRspQryInstrumentMarginRateCallback(_on_rsp_qry_instrument_margin_rate),
             OnRspQryInstrumentCommissionRateCallback(_on_rsp_qry_instrument_commission_rate),
+            OnRspQryExchangeCallback(_on_rsp_qry_exchange),
+            OnRspQryProductCallback(_on_rsp_qry_product),
+            OnRspQryInvestorPositionDetailCallback(_on_rsp_qry_investor_position_detail),
+            OnRspQryInvestorCallback(_on_rsp_qry_investor),
+            OnRspQryTradingCodeCallback(_on_rsp_qry_trading_code),
+            OnRspQryInstrumentOrderCommRateCallback(_on_rsp_qry_instrument_order_comm_rate),
+            OnRtnInstrumentStatusCallback(_on_rtn_instrument_status),
         ]
 
         self._callback_refs = callbacks
@@ -1004,6 +1188,13 @@ class CTPTraderApi:
             on_rsp_qry_depth_market_data=callbacks[21],
             on_rsp_qry_instrument_margin_rate=callbacks[22],
             on_rsp_qry_instrument_commission_rate=callbacks[23],
+            on_rsp_qry_exchange=callbacks[24],
+            on_rsp_qry_product=callbacks[25],
+            on_rsp_qry_investor_position_detail=callbacks[26],
+            on_rsp_qry_investor=callbacks[27],
+            on_rsp_qry_trading_code=callbacks[28],
+            on_rsp_qry_instrument_order_comm_rate=callbacks[29],
+            on_rtn_instrument_status=callbacks[30],
         )
 
     # ============================================================
@@ -1538,6 +1729,91 @@ class CTPTraderApi:
         log.info(f"Querying commission rate: {instrument_id or 'ALL'}")
 
         return self._dll.ReqQryInstrumentCommissionRate(
+            self._api,
+            broker_id.encode('gbk'),
+            investor_id.encode('gbk'),
+            instrument_id.encode('gbk') if instrument_id else b"",
+            request_id
+        )
+
+    # ============================================================
+    # 扩展查询
+    # ============================================================
+
+    def req_qry_exchange(self, exchange_id: str = "",
+                         request_id: int = 30) -> int:
+        """查询交易所"""
+        if not self._api:
+            raise RuntimeError("API not initialized")
+        log.info(f"Querying exchange: {exchange_id or 'ALL'}")
+        return self._dll.ReqQryExchange(
+            self._api,
+            exchange_id.encode('gbk') if exchange_id else b"",
+            request_id
+        )
+
+    def req_qry_product(self, product_id: str = "", exchange_id: str = "",
+                        request_id: int = 31) -> int:
+        """查询产品"""
+        if not self._api:
+            raise RuntimeError("API not initialized")
+        log.info(f"Querying product: {product_id or 'ALL'}")
+        return self._dll.ReqQryProduct(
+            self._api,
+            product_id.encode('gbk') if product_id else b"",
+            exchange_id.encode('gbk') if exchange_id else b"",
+            request_id
+        )
+
+    def req_qry_investor_position_detail(self, broker_id: str, investor_id: str,
+                                          instrument_id: str = "",
+                                          request_id: int = 32) -> int:
+        """查询持仓明细"""
+        if not self._api:
+            raise RuntimeError("API not initialized")
+        log.info(f"Querying position detail: {instrument_id or 'ALL'}")
+        return self._dll.ReqQryInvestorPositionDetail(
+            self._api,
+            broker_id.encode('gbk'),
+            investor_id.encode('gbk'),
+            instrument_id.encode('gbk') if instrument_id else b"",
+            request_id
+        )
+
+    def req_qry_investor(self, broker_id: str, investor_id: str,
+                         request_id: int = 33) -> int:
+        """查询投资者"""
+        if not self._api:
+            raise RuntimeError("API not initialized")
+        log.info(f"Querying investor: {investor_id}")
+        return self._dll.ReqQryInvestor(
+            self._api,
+            broker_id.encode('gbk'),
+            investor_id.encode('gbk'),
+            request_id
+        )
+
+    def req_qry_trading_code(self, broker_id: str, investor_id: str,
+                             request_id: int = 34) -> int:
+        """查询交易编码"""
+        if not self._api:
+            raise RuntimeError("API not initialized")
+        log.info(f"Querying trading code: {investor_id}")
+        return self._dll.ReqQryTradingCode(
+            self._api,
+            broker_id.encode('gbk'),
+            investor_id.encode('gbk'),
+            request_id
+        )
+
+    def req_qry_instrument_order_comm_rate(self, broker_id: str, investor_id: str,
+                                            instrument_id: str = "",
+                                            request_id: int = 35) -> int:
+        """查询报单手续费"""
+        if not self._api:
+            raise RuntimeError("API not initialized")
+        log.info(f"Querying order comm rate: {instrument_id or 'ALL'}")
+        return self._dll.ReqQryInstrumentOrderCommRate(
             self._api,
             broker_id.encode('gbk'),
             investor_id.encode('gbk'),

@@ -181,6 +181,53 @@ typedef void (*OnRspQryInstrumentCommissionRateCallback)(
     int error_id, const char* error_msg, int request_id, int is_last);
 
 // ============================================================
+// 回调函数类型定义 - 扩展查询响应
+// ============================================================
+typedef void (*OnRspQryExchangeCallback)(
+    const char* exchange_id, const char* exchange_name,
+    int error_id, const char* error_msg, int request_id, int is_last);
+
+typedef void (*OnRspQryProductCallback)(
+    const char* product_id, const char* product_name,
+    const char* exchange_id, int product_class,
+    int volume_multiple, double price_tick,
+    int error_id, const char* error_msg, int request_id, int is_last);
+
+typedef void (*OnRspQryInvestorPositionDetailCallback)(
+    const char* broker_id, const char* investor_id,
+    const char* instrument_id, const char* exchange_id,
+    char direction, const char* open_date,
+    const char* trade_id, int volume,
+    double open_price, double margin,
+    double close_profit, double position_profit,
+    const char* trading_day,
+    int error_id, const char* error_msg, int request_id, int is_last);
+
+typedef void (*OnRspQryInvestorCallback)(
+    const char* broker_id, const char* investor_id,
+    const char* investor_name, const char* id_card_no,
+    int investor_type,
+    int error_id, const char* error_msg, int request_id, int is_last);
+
+typedef void (*OnRspQryTradingCodeCallback)(
+    const char* broker_id, const char* investor_id,
+    const char* exchange_id, const char* client_id,
+    int client_id_type,
+    int error_id, const char* error_msg, int request_id, int is_last);
+
+typedef void (*OnRspQryInstrumentOrderCommRateCallback)(
+    const char* broker_id, const char* investor_id,
+    const char* instrument_id,
+    double order_comm_by_volume, double order_action_comm_by_volume,
+    const char* exchange_id,
+    int error_id, const char* error_msg, int request_id, int is_last);
+
+typedef void (*OnRtnInstrumentStatusCallback)(
+    const char* exchange_id, const char* instrument_id,
+    int instrument_status, const char* enter_time,
+    int enter_reason);
+
+// ============================================================
 // 回调注册结构体
 // ============================================================
 typedef struct {
@@ -217,6 +264,15 @@ typedef struct {
     OnRspQryDepthMarketDataCallback on_rsp_qry_depth_market_data;
     OnRspQryInstrumentMarginRateCallback on_rsp_qry_instrument_margin_rate;
     OnRspQryInstrumentCommissionRateCallback on_rsp_qry_instrument_commission_rate;
+
+    // 扩展查询响应
+    OnRspQryExchangeCallback on_rsp_qry_exchange;
+    OnRspQryProductCallback on_rsp_qry_product;
+    OnRspQryInvestorPositionDetailCallback on_rsp_qry_investor_position_detail;
+    OnRspQryInvestorCallback on_rsp_qry_investor;
+    OnRspQryTradingCodeCallback on_rsp_qry_trading_code;
+    OnRspQryInstrumentOrderCommRateCallback on_rsp_qry_instrument_order_comm_rate;
+    OnRtnInstrumentStatusCallback on_rtn_instrument_status;
 } TraderCallbacks;
 
 // ============================================================
@@ -308,6 +364,29 @@ CTP_API int ReqQryInstrumentMarginRate(void* api,
     const char* instrument_id, int request_id);
 
 CTP_API int ReqQryInstrumentCommissionRate(void* api,
+    const char* broker_id, const char* investor_id,
+    const char* instrument_id, int request_id);
+
+// ============================================================
+// API 函数声明 - 扩展查询
+// ============================================================
+CTP_API int ReqQryExchange(void* api,
+    const char* exchange_id, int request_id);
+
+CTP_API int ReqQryProduct(void* api,
+    const char* product_id, const char* exchange_id, int request_id);
+
+CTP_API int ReqQryInvestorPositionDetail(void* api,
+    const char* broker_id, const char* investor_id,
+    const char* instrument_id, int request_id);
+
+CTP_API int ReqQryInvestor(void* api,
+    const char* broker_id, const char* investor_id, int request_id);
+
+CTP_API int ReqQryTradingCode(void* api,
+    const char* broker_id, const char* investor_id, int request_id);
+
+CTP_API int ReqQryInstrumentOrderCommRate(void* api,
     const char* broker_id, const char* investor_id,
     const char* instrument_id, int request_id);
 

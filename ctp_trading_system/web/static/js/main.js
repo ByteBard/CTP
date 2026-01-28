@@ -70,7 +70,25 @@ const API = {
     // 策略控制
     startStrategy: (data) => API.request('POST', '/strategy/start', data),
     stopStrategy: () => API.request('POST', '/strategy/stop', {}),
-    getStrategyStatus: () => API.request('GET', '/strategy/status')
+    getStrategyStatus: () => API.request('GET', '/strategy/status'),
+
+    // 行情
+    subscribeMd: (data) => API.request('POST', '/market/subscribe', data),
+    unsubscribeMd: (data) => API.request('POST', '/market/unsubscribe', data),
+    getMdData: () => API.request('GET', '/market/data'),
+    getMdStatus: () => API.request('GET', '/market/status'),
+
+    // 综合查询
+    getExchanges: () => API.request('GET', '/trading/exchanges'),
+    getProducts: (exchangeId) => API.request('GET', '/trading/products' + (exchangeId ? '?exchange_id=' + exchangeId : '')),
+    getInvestor: () => API.request('GET', '/trading/investor'),
+    getTradingCodes: () => API.request('GET', '/trading/trading_codes'),
+    getPositionDetails: (instId) => API.request('GET', '/trading/position_details' + (instId ? '?instrument_id=' + instId : '')),
+    getTrades: (instId) => API.request('GET', '/trading/trades' + (instId ? '?instrument_id=' + instId : '')),
+    getMarginRate: (instId) => API.request('GET', '/trading/margin_rate/' + instId),
+    getCommissionRate: (instId) => API.request('GET', '/trading/commission_rate/' + instId),
+    getOrderCommRate: (instId) => API.request('GET', '/trading/order_comm_rate/' + instId),
+    getInstrumentStatus: () => API.request('GET', '/trading/instrument_status')
 };
 
 // ==================== WebSocket管理 ====================
@@ -380,13 +398,18 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 
     // ===== 交易操作 =====
+    function getSkipValidation() {
+        return document.getElementById('chk-skip-validation').checked;
+    }
+
     document.getElementById('btn-buy-open').addEventListener('click', async () => {
         const result = await API.openPosition({
             instrument_id: document.getElementById('input-instrument').value,
             price: parseFloat(document.getElementById('input-price').value),
             volume: parseInt(document.getElementById('input-volume').value),
             direction: 'buy',
-            offset: 'open'
+            offset: 'open',
+            skip_validation: getSkipValidation()
         });
         if (!result.success) {
             alert(result.message);
@@ -400,7 +423,8 @@ document.addEventListener('DOMContentLoaded', function() {
             price: parseFloat(document.getElementById('input-price').value),
             volume: parseInt(document.getElementById('input-volume').value),
             direction: 'sell',
-            offset: 'open'
+            offset: 'open',
+            skip_validation: getSkipValidation()
         });
         if (!result.success) {
             alert(result.message);
@@ -414,7 +438,8 @@ document.addEventListener('DOMContentLoaded', function() {
             price: parseFloat(document.getElementById('input-price').value),
             volume: parseInt(document.getElementById('input-volume').value),
             direction: 'buy',
-            offset: 'close'
+            offset: 'close',
+            skip_validation: getSkipValidation()
         });
         if (!result.success) {
             alert(result.message);
@@ -428,7 +453,8 @@ document.addEventListener('DOMContentLoaded', function() {
             price: parseFloat(document.getElementById('input-price').value),
             volume: parseInt(document.getElementById('input-volume').value),
             direction: 'sell',
-            offset: 'close'
+            offset: 'close',
+            skip_validation: getSkipValidation()
         });
         if (!result.success) {
             alert(result.message);
@@ -495,6 +521,60 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('btn-test-insufficient-margin').addEventListener('click', () => testValidation('insufficient-margin', 'test-result-17'));
     document.getElementById('btn-test-insufficient-pos').addEventListener('click', () => testValidation('insufficient-pos', 'test-result-18'));
     document.getElementById('btn-test-non-trading-time').addEventListener('click', () => testValidation('non-trading-time', 'test-result-19'));
+
+    // ===== CTP柜台错误测试 (测试点22-24) =====
+    async function testCtpError(testType, resultId) {
+        const instrument = document.getElementById('ctp-test-instrument').value;
+        const errorEl = document.getElementById('error-message');
+        const resultEl = document.getElementById(resultId);
+        let data = {};
+
+        switch(testType) {
+            case 'margin':
+                // 资金不足: 发超大手数委托
+                data = { instrument_id: instrument, price: 99999, volume: 9999, direction: 'buy', offset: 'open', skip_validation: true };
+                break;
+            case 'position':
+                // 持仓不足: 对无持仓合约平仓
+                data = { instrument_id: instrument, price: 1, volume: 1, direction: 'sell', offset: 'close', skip_validation: true };
+                break;
+            case 'market':
+                // 市场状态错误: 直接发委托（非交易时段会被柜台拒绝）
+                data = { instrument_id: instrument, price: 1, volume: 1, direction: 'buy', offset: 'open', skip_validation: true };
+                break;
+        }
+
+        resultEl.textContent = '测试中...';
+        resultEl.className = 'badge bg-info me-2';
+        errorEl.textContent = '已发送委托到CTP柜台，等待柜台返回错误...（请查看实时日志）';
+
+        try {
+            let result;
+            if (testType === 'position') {
+                result = await API.closePosition(data);
+            } else {
+                result = await API.openPosition(data);
+            }
+
+            if (!result.success) {
+                resultEl.textContent = '已触发';
+                resultEl.className = 'badge bg-success me-2';
+                errorEl.textContent = 'CTP返回: ' + result.message;
+            } else {
+                resultEl.textContent = '已发送';
+                resultEl.className = 'badge bg-warning me-2';
+                errorEl.textContent = '委托已发送到柜台，请在实时日志中查看CTP返回的错误信息';
+            }
+        } catch (error) {
+            resultEl.textContent = '异常';
+            resultEl.className = 'badge bg-danger me-2';
+            errorEl.textContent = '测试异常: ' + error.message;
+        }
+    }
+
+    document.getElementById('btn-test-ctp-margin').addEventListener('click', () => testCtpError('margin', 'test-result-22'));
+    document.getElementById('btn-test-ctp-position').addEventListener('click', () => testCtpError('position', 'test-result-23'));
+    document.getElementById('btn-test-ctp-market').addEventListener('click', () => testCtpError('market', 'test-result-24'));
 
     // ===== 应急处置 =====
     document.getElementById('btn-pause-trading').addEventListener('click', async () => {
@@ -672,4 +752,111 @@ document.addEventListener('DOMContentLoaded', function() {
             console.error('Error loading thresholds:', error);
         }
     }, 1000);
+
+    // ==================== 行情数据页 ====================
+    const btnSubscribe = document.getElementById('btn-subscribe');
+    const btnUnsubscribe = document.getElementById('btn-unsubscribe');
+
+    if (btnSubscribe) {
+        btnSubscribe.addEventListener('click', async () => {
+            const input = document.getElementById('input-subscribe-instruments').value.trim();
+            if (!input) return;
+            const ids = input.split(',').map(s => s.trim()).filter(s => s);
+            const result = await API.subscribeMd({ instrument_ids: ids });
+            WebSocketManager.addRealtimeLog('MARKET', result.success ? 'INFO' : 'ERROR', result.message);
+        });
+    }
+
+    if (btnUnsubscribe) {
+        btnUnsubscribe.addEventListener('click', async () => {
+            const input = document.getElementById('input-subscribe-instruments').value.trim();
+            if (!input) return;
+            const ids = input.split(',').map(s => s.trim()).filter(s => s);
+            const result = await API.unsubscribeMd({ instrument_ids: ids });
+            WebSocketManager.addRealtimeLog('MARKET', result.success ? 'INFO' : 'ERROR', result.message);
+        });
+    }
+
+    // 定时刷新行情数据
+    setInterval(async () => {
+        const marketTab = document.getElementById('market');
+        if (!marketTab || !marketTab.classList.contains('active')) return;
+        try {
+            const result = await API.getMdData();
+            if (result.success && result.data) {
+                const tbody = document.getElementById('market-data-body');
+                if (!tbody) return;
+                tbody.innerHTML = '';
+                for (const [id, d] of Object.entries(result.data)) {
+                    const row = document.createElement('tr');
+                    row.innerHTML = `<td>${d.instrument_id}</td>` +
+                        `<td>${d.last_price?.toFixed(2) || '--'}</td>` +
+                        `<td>${d.upper_limit_price?.toFixed(2) || '--'}</td>` +
+                        `<td>${d.lower_limit_price?.toFixed(2) || '--'}</td>` +
+                        `<td>${d.bid_price1?.toFixed(2) || '--'}</td>` +
+                        `<td>${d.bid_volume1 || 0}</td>` +
+                        `<td>${d.ask_price1?.toFixed(2) || '--'}</td>` +
+                        `<td>${d.ask_volume1 || 0}</td>` +
+                        `<td>${d.volume || 0}</td>` +
+                        `<td>${d.open_interest?.toFixed(0) || 0}</td>` +
+                        `<td>${d.update_time || '--'}</td>`;
+                    tbody.appendChild(row);
+                }
+            }
+        } catch (e) {}
+    }, 1000);
+
+    // ==================== 综合查询页 ====================
+    function showQueryResult(data) {
+        const el = document.getElementById('query-result');
+        if (el) el.textContent = JSON.stringify(data, null, 2);
+    }
+
+    const qryHandlers = {
+        'btn-qry-exchanges': () => API.getExchanges(),
+        'btn-qry-products': () => API.getProducts(''),
+        'btn-qry-investor': () => API.getInvestor(),
+        'btn-qry-trading-codes': () => API.getTradingCodes(),
+        'btn-qry-position-detail': () => {
+            const inst = document.getElementById('input-qry-instrument')?.value || '';
+            return API.getPositionDetails(inst);
+        },
+        'btn-qry-trades': () => {
+            const inst = document.getElementById('input-qry-instrument')?.value || '';
+            return API.getTrades(inst);
+        },
+        'btn-qry-instrument-status': () => API.getInstrumentStatus(),
+        'btn-qry-margin-rate': () => {
+            const inst = document.getElementById('input-qry-instrument')?.value;
+            if (!inst) { showQueryResult({error: '请输入合约代码'}); return null; }
+            return API.getMarginRate(inst);
+        },
+        'btn-qry-commission-rate': () => {
+            const inst = document.getElementById('input-qry-instrument')?.value;
+            if (!inst) { showQueryResult({error: '请输入合约代码'}); return null; }
+            return API.getCommissionRate(inst);
+        },
+        'btn-qry-order-comm-rate': () => {
+            const inst = document.getElementById('input-qry-instrument')?.value;
+            if (!inst) { showQueryResult({error: '请输入合约代码'}); return null; }
+            return API.getOrderCommRate(inst);
+        },
+    };
+
+    for (const [btnId, handler] of Object.entries(qryHandlers)) {
+        const btn = document.getElementById(btnId);
+        if (btn) {
+            btn.addEventListener('click', async () => {
+                try {
+                    const promise = handler();
+                    if (promise) {
+                        const result = await promise;
+                        showQueryResult(result);
+                    }
+                } catch (e) {
+                    showQueryResult({error: e.message});
+                }
+            });
+        }
+    }
 });

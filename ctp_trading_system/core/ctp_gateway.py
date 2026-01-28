@@ -127,6 +127,16 @@ class CtpGateway:
         self._positions: Dict[str, Any] = {}
         self._account: Optional[Dict] = None
         self._orders: Dict[str, Any] = {}
+        self._trades: Dict[str, Any] = {}
+        self._exchanges: List[Dict] = []
+        self._products: List[Dict] = []
+        self._position_details: List[Dict] = []
+        self._investor_info: Optional[Dict] = None
+        self._trading_codes: List[Dict] = []
+        self._order_comm_rate: Optional[Dict] = None
+        self._instrument_status: Dict[str, Any] = {}
+        self._margin_rate: Optional[Dict] = None
+        self._commission_rate: Optional[Dict] = None
 
         # 回调
         self._callbacks: Dict[str, List[Callable]] = {
@@ -145,6 +155,16 @@ class CtpGateway:
         self._instrument_event = threading.Event()
         self._account_event = threading.Event()
         self._position_event = threading.Event()
+        self._exchange_event = threading.Event()
+        self._product_event = threading.Event()
+        self._position_detail_event = threading.Event()
+        self._investor_event = threading.Event()
+        self._trading_code_event = threading.Event()
+        self._order_comm_rate_event = threading.Event()
+        self._order_event = threading.Event()
+        self._trade_event = threading.Event()
+        self._margin_rate_event = threading.Event()
+        self._commission_rate_event = threading.Event()
 
         # 锁
         self._lock = threading.Lock()
@@ -252,15 +272,28 @@ class CtpGateway:
         def on_order_insert(broker_id, investor_id, instrument_id, order_ref, direction,
                            offset_flag, price, volume, error_id, error_msg, request_id, is_last):
             if error_id != 0:
+                dir_char = _to_char(direction) if direction else ''
+                offset_char = _to_char(offset_flag) if offset_flag else ''
+                dir_text = "买" if dir_char == '0' else "卖"
+                offset_text = "开仓" if offset_char == '0' else "平仓"
                 self.logger.log_error(
-                    "报单失败",
+                    f"CTP柜台返回: ErrorID={error_id}, ErrorMsg={error_msg}, "
+                    f"合约={instrument_id}, 方向={dir_text}, 开平={offset_text}, "
+                    f"价格={price}, 数量={volume}",
                     error_code=error_id,
                     error_msg=error_msg,
-                    instrument_id=instrument_id
+                    instrument_id=instrument_id,
+                    direction=dir_text,
+                    offset=offset_text,
+                    price=price,
+                    volume=volume
                 )
                 for callback in self._callbacks.get("on_error", []):
                     try:
-                        callback("order_error", {"instrument_id": instrument_id, "order_ref": order_ref},
+                        callback("order_error",
+                                {"instrument_id": instrument_id, "order_ref": order_ref,
+                                 "direction": dir_text, "offset": offset_text,
+                                 "price": price, "volume": volume},
                                 {"ErrorID": error_id, "ErrorMsg": error_msg})
                     except Exception as e:
                         self.logger.log_exception(e, "on_error callback")
@@ -281,29 +314,41 @@ class CtpGateway:
                     except Exception as e:
                         self.logger.log_exception(e, "on_error callback")
 
+        def _to_char(val):
+            """Convert int/bytes to char"""
+            if isinstance(val, int):
+                return chr(val)
+            elif isinstance(val, bytes):
+                return chr(val[0]) if val else ''
+            return str(val)
+
         def on_rtn_order(broker_id, investor_id, instrument_id, order_ref, user_id,
                         direction, offset_flag, price, volume_total, volume_traded,
                         order_status, order_sys_id, front_id, session_id,
                         insert_date, insert_time, status_msg):
+            dir_char = _to_char(direction)
+            offset_char = _to_char(offset_flag)
+            status_char = _to_char(order_status)
+
             self.logger.log_order_status(
                 order_ref=order_ref,
-                status=chr(order_status) if isinstance(order_status, int) else order_status,
+                status=status_char,
                 status_msg=status_msg,
                 instrument_id=instrument_id,
-                direction=chr(direction) if isinstance(direction, int) else direction,
-                offset=chr(offset_flag) if isinstance(offset_flag, int) else offset_flag,
+                direction=dir_char,
+                offset=offset_char,
                 volume_total=volume_total,
                 volume_traded=volume_traded
             )
             order_data = {
                 "OrderRef": order_ref,
                 "InstrumentID": instrument_id,
-                "Direction": chr(direction) if isinstance(direction, int) else direction,
-                "CombOffsetFlag": chr(offset_flag) if isinstance(offset_flag, int) else offset_flag,
+                "Direction": dir_char,
+                "CombOffsetFlag": offset_char,
                 "LimitPrice": price,
                 "VolumeTotal": volume_total,
                 "VolumeTraded": volume_traded,
-                "OrderStatus": chr(order_status) if isinstance(order_status, int) else order_status,
+                "OrderStatus": status_char,
                 "OrderSysID": order_sys_id,
                 "FrontID": front_id,
                 "SessionID": session_id,
@@ -319,10 +364,13 @@ class CtpGateway:
         def on_rtn_trade(broker_id, investor_id, instrument_id, order_ref, user_id,
                         trade_id, direction, offset_flag, price, volume,
                         trade_date, trade_time, order_sys_id):
+            dir_char = _to_char(direction)
+            offset_char = _to_char(offset_flag)
+
             self.logger.log_trade(
                 instrument_id=instrument_id,
-                direction=chr(direction) if isinstance(direction, int) else direction,
-                offset=chr(offset_flag) if isinstance(offset_flag, int) else offset_flag,
+                direction=dir_char,
+                offset=offset_char,
                 price=price,
                 volume=volume,
                 trade_id=trade_id,
@@ -331,8 +379,8 @@ class CtpGateway:
             trade_data = {
                 "TradeID": trade_id,
                 "InstrumentID": instrument_id,
-                "Direction": chr(direction) if isinstance(direction, int) else direction,
-                "OffsetFlag": chr(offset_flag) if isinstance(offset_flag, int) else offset_flag,
+                "Direction": dir_char,
+                "OffsetFlag": offset_char,
                 "Price": price,
                 "Volume": volume,
                 "OrderRef": order_ref,
@@ -405,6 +453,185 @@ class CtpGateway:
         def on_error(error_id, error_msg, request_id, is_last):
             self.logger.log_error("CTP错误", error_code=error_id, error_msg=error_msg)
 
+        # 查询订单回调
+        def on_qry_order(broker_id, investor_id, instrument_id, order_ref,
+                         direction, offset_flag, price, volume_total, volume_traded,
+                         order_status, order_sys_id, insert_date, insert_time,
+                         error_id, error_msg, request_id, is_last):
+            if instrument_id:
+                dir_char = _to_char(direction) if direction else '0'
+                offset_char = _to_char(offset_flag) if offset_flag else '0'
+                status_char = _to_char(order_status) if order_status else 'a'
+                key = order_ref or order_sys_id or f"{instrument_id}_{insert_time}"
+                self._orders[key] = {
+                    "OrderRef": order_ref,
+                    "InstrumentID": instrument_id,
+                    "Direction": dir_char,
+                    "CombOffsetFlag": offset_char,
+                    "LimitPrice": price,
+                    "VolumeTotal": volume_total,
+                    "VolumeTraded": volume_traded,
+                    "OrderStatus": status_char,
+                    "OrderSysID": order_sys_id,
+                    "InsertDate": insert_date,
+                    "InsertTime": insert_time,
+                }
+            if is_last:
+                self._order_event.set()
+
+        # 查询成交回调
+        def on_qry_trade(broker_id, investor_id, instrument_id, trade_id,
+                         direction, offset_flag, price, volume,
+                         trade_date, trade_time,
+                         error_id, error_msg, request_id, is_last):
+            if instrument_id:
+                dir_char = _to_char(direction) if direction else '0'
+                offset_char = _to_char(offset_flag) if offset_flag else '0'
+                self._trades[trade_id] = {
+                    "TradeID": trade_id,
+                    "InstrumentID": instrument_id,
+                    "Direction": dir_char,
+                    "OffsetFlag": offset_char,
+                    "Price": price,
+                    "Volume": volume,
+                    "TradeDate": trade_date,
+                    "TradeTime": trade_time,
+                }
+            if is_last:
+                self._trade_event.set()
+
+        # 扩展查询回调
+        def on_qry_exchange(exchange_id, exchange_name,
+                            error_id, error_msg, request_id, is_last):
+            if exchange_id:
+                self._exchanges.append({
+                    "exchange_id": exchange_id,
+                    "exchange_name": exchange_name,
+                })
+            if is_last:
+                self._exchange_event.set()
+
+        def on_qry_product(product_id, product_name, exchange_id, product_class,
+                           volume_multiple, price_tick,
+                           error_id, error_msg, request_id, is_last):
+            if product_id:
+                self._products.append({
+                    "product_id": product_id,
+                    "product_name": product_name,
+                    "exchange_id": exchange_id,
+                    "product_class": product_class,
+                    "volume_multiple": volume_multiple,
+                    "price_tick": price_tick,
+                })
+            if is_last:
+                self._product_event.set()
+
+        def on_qry_position_detail(broker_id, investor_id, instrument_id, exchange_id,
+                                    direction, open_date, trade_id, volume,
+                                    open_price, margin, close_profit, position_profit,
+                                    trading_day,
+                                    error_id, error_msg, request_id, is_last):
+            if instrument_id and volume > 0:
+                dir_char = _to_char(direction) if direction else '0'
+                self._position_details.append({
+                    "instrument_id": instrument_id,
+                    "exchange_id": exchange_id,
+                    "direction": dir_char,
+                    "open_date": open_date,
+                    "trade_id": trade_id,
+                    "volume": volume,
+                    "open_price": open_price,
+                    "margin": margin,
+                    "close_profit": close_profit,
+                    "position_profit": position_profit,
+                    "trading_day": trading_day,
+                })
+            if is_last:
+                self._position_detail_event.set()
+
+        def on_qry_investor(broker_id, investor_id, investor_name, id_card_no,
+                            investor_type,
+                            error_id, error_msg, request_id, is_last):
+            if investor_id:
+                self._investor_info = {
+                    "broker_id": broker_id,
+                    "investor_id": investor_id,
+                    "investor_name": investor_name,
+                    "id_card_no": id_card_no,
+                    "investor_type": investor_type,
+                }
+            if is_last:
+                self._investor_event.set()
+
+        def on_qry_trading_code(broker_id, investor_id, exchange_id, client_id,
+                                client_id_type,
+                                error_id, error_msg, request_id, is_last):
+            if exchange_id:
+                self._trading_codes.append({
+                    "exchange_id": exchange_id,
+                    "client_id": client_id,
+                    "client_id_type": client_id_type,
+                })
+            if is_last:
+                self._trading_code_event.set()
+
+        def on_qry_order_comm_rate(broker_id, investor_id, instrument_id,
+                                    order_comm, action_comm, exchange_id,
+                                    error_id, error_msg, request_id, is_last):
+            if instrument_id:
+                self._order_comm_rate = {
+                    "instrument_id": instrument_id,
+                    "order_comm_by_volume": order_comm,
+                    "order_action_comm_by_volume": action_comm,
+                    "exchange_id": exchange_id,
+                }
+            if is_last:
+                self._order_comm_rate_event.set()
+
+        def on_rtn_instrument_status(exchange_id, instrument_id, instrument_status,
+                                      enter_time, enter_reason):
+            key = instrument_id or exchange_id
+            self._instrument_status[key] = {
+                "exchange_id": exchange_id,
+                "instrument_id": instrument_id,
+                "instrument_status": instrument_status,
+                "enter_time": enter_time,
+                "enter_reason": enter_reason,
+            }
+
+        def on_qry_margin_rate(broker_id, investor_id, instrument_id,
+                               long_margin_ratio_by_money, long_margin_ratio_by_volume,
+                               short_margin_ratio_by_money, short_margin_ratio_by_volume,
+                               error_id, error_msg, request_id, is_last):
+            if instrument_id:
+                self._margin_rate = {
+                    "instrument_id": instrument_id,
+                    "long_margin_ratio_by_money": long_margin_ratio_by_money,
+                    "long_margin_ratio_by_volume": long_margin_ratio_by_volume,
+                    "short_margin_ratio_by_money": short_margin_ratio_by_money,
+                    "short_margin_ratio_by_volume": short_margin_ratio_by_volume,
+                }
+            if is_last:
+                self._margin_rate_event.set()
+
+        def on_qry_commission_rate(broker_id, investor_id, instrument_id,
+                                    open_ratio_by_money, open_ratio_by_volume,
+                                    close_ratio_by_money, close_ratio_by_volume,
+                                    close_today_ratio_by_money, close_today_ratio_by_volume,
+                                    error_id, error_msg, request_id, is_last):
+            if instrument_id:
+                self._commission_rate = {
+                    "instrument_id": instrument_id,
+                    "open_ratio_by_money": open_ratio_by_money,
+                    "open_ratio_by_volume": open_ratio_by_volume,
+                    "close_ratio_by_money": close_ratio_by_money,
+                    "close_ratio_by_volume": close_ratio_by_volume,
+                    "close_today_ratio_by_money": close_today_ratio_by_money,
+                    "close_today_ratio_by_volume": close_today_ratio_by_volume,
+                }
+            if is_last:
+                self._commission_rate_event.set()
+
         # 注册回调
         self._api.on_front_connected = on_connected
         self._api.on_front_disconnected = on_disconnected
@@ -421,6 +648,17 @@ class CtpGateway:
         self._api.on_rsp_qry_trading_account = on_qry_trading_account
         self._api.on_rsp_qry_investor_position = on_qry_position
         self._api.on_rsp_error = on_error
+        self._api.on_rsp_qry_order = on_qry_order
+        self._api.on_rsp_qry_trade = on_qry_trade
+        self._api.on_rsp_qry_exchange = on_qry_exchange
+        self._api.on_rsp_qry_product = on_qry_product
+        self._api.on_rsp_qry_investor_position_detail = on_qry_position_detail
+        self._api.on_rsp_qry_investor = on_qry_investor
+        self._api.on_rsp_qry_trading_code = on_qry_trading_code
+        self._api.on_rsp_qry_instrument_order_comm_rate = on_qry_order_comm_rate
+        self._api.on_rtn_instrument_status = on_rtn_instrument_status
+        self._api.on_rsp_qry_instrument_margin_rate = on_qry_margin_rate
+        self._api.on_rsp_qry_instrument_commission_rate = on_qry_commission_rate
 
     # ==================== 连接管理 ====================
 
@@ -567,7 +805,12 @@ class CtpGateway:
     # ==================== 交易功能 ====================
 
     def open_position(self, instrument_id: str, direction: Direction,
-                      price: float, volume: int) -> Optional[str]:
+                      price: float, volume: int,
+                      exchange_id: str = "",
+                      order_price_type: str = '2',
+                      time_condition: str = '3',
+                      volume_condition: str = '1',
+                      min_volume: int = 1) -> Optional[str]:
         """
         开仓
         满足评估表第2项：开仓指令
@@ -586,12 +829,18 @@ class CtpGateway:
             direction=direction,
             offset=OffsetFlag.OPEN,
             price=price,
-            volume=volume
+            volume=volume,
+            order_price_type=order_price_type,
+            time_condition=time_condition,
+            volume_condition=volume_condition,
         )
 
     def close_position(self, instrument_id: str, direction: Direction,
                        price: float, volume: int,
-                       close_today: bool = False) -> Optional[str]:
+                       close_today: bool = False,
+                       order_price_type: str = '2',
+                       time_condition: str = '3',
+                       volume_condition: str = '1') -> Optional[str]:
         """
         平仓
         满足评估表第3项：平仓指令
@@ -612,7 +861,10 @@ class CtpGateway:
             direction=direction,
             offset=offset,
             price=price,
-            volume=volume
+            volume=volume,
+            order_price_type=order_price_type,
+            time_condition=time_condition,
+            volume_condition=volume_condition,
         )
 
     def cancel_order(self, instrument_id: str, order_ref: str,
@@ -659,8 +911,12 @@ class CtpGateway:
         return True
 
     def _send_order(self, instrument_id: str, direction: Direction,
-                    offset: OffsetFlag, price: float, volume: int) -> Optional[str]:
+                    offset: OffsetFlag, price: float, volume: int,
+                    order_price_type: str = '2',
+                    time_condition: str = '3',
+                    volume_condition: str = '1') -> Optional[str]:
         """发送报单"""
+        import sys
         if not self._logged_in:
             self.logger.log_error("未登录，无法报单")
             return None
@@ -701,6 +957,9 @@ class CtpGateway:
             offset_flag=ctp_offset,
             price=price,
             volume=volume,
+            order_price_type=ord(order_price_type),
+            time_condition=ord(time_condition),
+            volume_condition=ord(volume_condition),
             request_id=self._get_request_id()
         )
 
@@ -768,6 +1027,233 @@ class CtpGateway:
 
         self._position_event.wait(timeout)
         return self._positions
+
+    def query_market_data(self, instrument_id: str, timeout: int = 5) -> Optional[Dict]:
+        """
+        查询行情数据
+
+        Args:
+            instrument_id: 合约代码
+            timeout: 超时时间
+
+        Returns:
+            行情数据字典
+        """
+        if not self._logged_in:
+            return None
+
+        self._market_data = None
+        self._market_data_event = threading.Event()
+
+        # 注册回调
+        def on_market_data(inst_id, exchange_id, last_price, pre_settlement_price,
+                          open_price, highest_price, lowest_price,
+                          volume, turnover, open_interest,
+                          bid_price1, bid_volume1, ask_price1, ask_volume1,
+                          update_time, error_id, error_msg, request_id, is_last):
+            if inst_id == instrument_id:
+                self._market_data = {
+                    "instrument_id": inst_id,
+                    "exchange_id": exchange_id,
+                    "last_price": last_price,
+                    "pre_settlement_price": pre_settlement_price,
+                    "open_price": open_price,
+                    "highest_price": highest_price,
+                    "lowest_price": lowest_price,
+                    "volume": volume,
+                    "turnover": turnover,
+                    "open_interest": open_interest,
+                    "bid_price1": bid_price1,
+                    "bid_volume1": bid_volume1,
+                    "ask_price1": ask_price1,
+                    "ask_volume1": ask_volume1,
+                    "update_time": update_time
+                }
+                self._market_data_event.set()
+
+        old_callback = self._api.on_rsp_qry_depth_market_data
+        self._api.on_rsp_qry_depth_market_data = on_market_data
+
+        try:
+            ret = self._api.req_qry_depth_market_data(
+                instrument_id=instrument_id,
+                request_id=self._get_request_id()
+            )
+            if ret != 0:
+                self.logger.log_error(f"查询行情失败: ret={ret}")
+                return None
+
+            self._market_data_event.wait(timeout)
+            return self._market_data
+        finally:
+            self._api.on_rsp_qry_depth_market_data = old_callback
+
+    def query_orders(self, instrument_id: str = "", timeout: int = 10) -> Dict[str, Any]:
+        """查询订单列表"""
+        if not self._logged_in:
+            return {}
+        self._orders.clear()
+        self._order_event.clear()
+        ret = self._api.req_qry_order(
+            broker_id=self.config.broker_id,
+            investor_id=self.config.investor_id,
+            instrument_id=instrument_id,
+            request_id=self._get_request_id()
+        )
+        if ret != 0:
+            return {}
+        self._order_event.wait(timeout)
+        return self._orders
+
+    def query_trades(self, instrument_id: str = "", timeout: int = 10) -> Dict[str, Any]:
+        """查询成交列表"""
+        if not self._logged_in:
+            return {}
+        self._trades.clear()
+        self._trade_event.clear()
+        ret = self._api.req_qry_trade(
+            broker_id=self.config.broker_id,
+            investor_id=self.config.investor_id,
+            instrument_id=instrument_id,
+            request_id=self._get_request_id()
+        )
+        if ret != 0:
+            return {}
+        self._trade_event.wait(timeout)
+        return self._trades
+
+    def query_exchanges(self, timeout: int = 10) -> List[Dict]:
+        """查询交易所列表"""
+        if not self._logged_in:
+            return []
+        self._exchanges.clear()
+        self._exchange_event.clear()
+        ret = self._api.req_qry_exchange(
+            request_id=self._get_request_id()
+        )
+        if ret != 0:
+            return []
+        self._exchange_event.wait(timeout)
+        return self._exchanges
+
+    def query_products(self, exchange_id: str = "", timeout: int = 10) -> List[Dict]:
+        """查询产品列表"""
+        if not self._logged_in:
+            return []
+        self._products.clear()
+        self._product_event.clear()
+        ret = self._api.req_qry_product(
+            exchange_id=exchange_id,
+            request_id=self._get_request_id()
+        )
+        if ret != 0:
+            return []
+        self._product_event.wait(timeout)
+        return self._products
+
+    def query_position_detail(self, instrument_id: str = "", timeout: int = 10) -> List[Dict]:
+        """查询持仓明细"""
+        if not self._logged_in:
+            return []
+        self._position_details.clear()
+        self._position_detail_event.clear()
+        ret = self._api.req_qry_investor_position_detail(
+            broker_id=self.config.broker_id,
+            investor_id=self.config.investor_id,
+            instrument_id=instrument_id,
+            request_id=self._get_request_id()
+        )
+        if ret != 0:
+            return []
+        self._position_detail_event.wait(timeout)
+        return self._position_details
+
+    def query_investor(self, timeout: int = 10) -> Optional[Dict]:
+        """查询投资者信息"""
+        if not self._logged_in:
+            return None
+        self._investor_info = None
+        self._investor_event.clear()
+        ret = self._api.req_qry_investor(
+            broker_id=self.config.broker_id,
+            investor_id=self.config.investor_id,
+            request_id=self._get_request_id()
+        )
+        if ret != 0:
+            return None
+        self._investor_event.wait(timeout)
+        return self._investor_info
+
+    def query_trading_codes(self, timeout: int = 10) -> List[Dict]:
+        """查询交易编码"""
+        if not self._logged_in:
+            return []
+        self._trading_codes.clear()
+        self._trading_code_event.clear()
+        ret = self._api.req_qry_trading_code(
+            broker_id=self.config.broker_id,
+            investor_id=self.config.investor_id,
+            request_id=self._get_request_id()
+        )
+        if ret != 0:
+            return []
+        self._trading_code_event.wait(timeout)
+        return self._trading_codes
+
+    def query_order_comm_rate(self, instrument_id: str, timeout: int = 10) -> Optional[Dict]:
+        """查询报单手续费"""
+        if not self._logged_in:
+            return None
+        self._order_comm_rate = None
+        self._order_comm_rate_event.clear()
+        ret = self._api.req_qry_instrument_order_comm_rate(
+            broker_id=self.config.broker_id,
+            investor_id=self.config.investor_id,
+            instrument_id=instrument_id,
+            request_id=self._get_request_id()
+        )
+        if ret != 0:
+            return None
+        self._order_comm_rate_event.wait(timeout)
+        return self._order_comm_rate
+
+    def query_margin_rate(self, instrument_id: str, timeout: int = 10) -> Optional[Dict]:
+        """查询保证金率"""
+        if not self._logged_in:
+            return None
+        self._margin_rate = None
+        self._margin_rate_event.clear()
+        ret = self._api.req_qry_instrument_margin_rate(
+            broker_id=self.config.broker_id,
+            investor_id=self.config.investor_id,
+            instrument_id=instrument_id,
+            request_id=self._get_request_id()
+        )
+        if ret != 0:
+            return None
+        self._margin_rate_event.wait(timeout)
+        return self._margin_rate
+
+    def query_commission_rate(self, instrument_id: str, timeout: int = 10) -> Optional[Dict]:
+        """查询手续费率"""
+        if not self._logged_in:
+            return None
+        self._commission_rate = None
+        self._commission_rate_event.clear()
+        ret = self._api.req_qry_instrument_commission_rate(
+            broker_id=self.config.broker_id,
+            investor_id=self.config.investor_id,
+            instrument_id=instrument_id,
+            request_id=self._get_request_id()
+        )
+        if ret != 0:
+            return None
+        self._commission_rate_event.wait(timeout)
+        return self._commission_rate
+
+    def get_instrument_status(self) -> Dict[str, Any]:
+        """获取合约交易状态（从缓存）"""
+        return self._instrument_status
 
     # ==================== 交易控制 ====================
 

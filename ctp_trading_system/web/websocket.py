@@ -38,7 +38,7 @@ class ConnectionManager:
 
         for connection in self.active_connections.copy():
             try:
-                await connection.send_text(message_json)
+                await asyncio.wait_for(connection.send_text(message_json), timeout=2.0)
             except Exception:
                 disconnected.add(connection)
 

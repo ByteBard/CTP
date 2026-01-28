@@ -78,14 +78,14 @@ async def get_order_stats():
 
     # 获取按合约统计
     instrument_stats = []
-    stats_by_instrument = system.order_monitor.get_stats_by_instrument()
+    all_instrument_stats = system.order_monitor.get_all_instrument_stats()
 
-    for instrument_id, stats in stats_by_instrument.items():
+    for instrument_id, stats in all_instrument_stats.items():
         instrument_stats.append({
             "instrument_id": instrument_id,
-            "open_count": stats.get("open_count", 0),
-            "close_count": stats.get("close_count", 0),
-            "cancel_count": stats.get("cancel_count", 0)
+            "open_count": stats.open_count,
+            "close_count": stats.close_count,
+            "cancel_count": stats.cancel_count
         })
 
     return {

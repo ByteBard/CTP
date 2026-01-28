@@ -162,6 +162,21 @@ class ThresholdManager:
             "new_value": threshold
         })
 
+    def update_thresholds(self, config):
+        """
+        批量更新阈值配置
+        """
+        if hasattr(config, 'repeat_open_threshold') and config.repeat_open_threshold is not None:
+            self.set_repeat_open_threshold(config.repeat_open_threshold)
+        if hasattr(config, 'repeat_close_threshold') and config.repeat_close_threshold is not None:
+            self.set_repeat_close_threshold(config.repeat_close_threshold)
+        if hasattr(config, 'repeat_cancel_threshold') and config.repeat_cancel_threshold is not None:
+            self.set_repeat_cancel_threshold(config.repeat_cancel_threshold)
+        if hasattr(config, 'total_order_threshold') and config.total_order_threshold is not None:
+            self.set_total_order_threshold(config.total_order_threshold)
+        if hasattr(config, 'total_cancel_threshold') and config.total_cancel_threshold is not None:
+            self.set_total_cancel_threshold(config.total_cancel_threshold)
+
     # ==================== 阈值检查 ====================
 
     def _check_repeat_open(self, instrument_id: str):
@@ -289,7 +304,7 @@ class ThresholdManager:
                 current_value=current,
                 threshold_value=threshold,
                 instrument_id=None,
-                message=f"撤单总笔数({current})达到阈值({threshold})"
+                message=f"任意撤单总笔数({current})达到阈值({threshold})"
             )
 
     # ==================== 预警触发 ====================
@@ -371,7 +386,7 @@ class ThresholdManager:
                 current_value=total_cancel,
                 threshold_value=self.config.total_cancel_threshold,
                 instrument_id=None,
-                message=f"撤单总笔数({total_cancel})达到阈值",
+                message=f"任意撤单总笔数({total_cancel})达到阈值",
                 timestamp=datetime.now()
             ))
 

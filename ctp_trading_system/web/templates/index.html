@@ -76,6 +76,18 @@
                         </button>
                     </li>
                     <li class="nav-item">
+                        <button class="nav-link" id="market-tab" data-bs-toggle="tab"
+                                data-bs-target="#market" type="button">
+                            <i class="bi bi-graph-up"></i> 行情数据
+                        </button>
+                    </li>
+                    <li class="nav-item">
+                        <button class="nav-link" id="query-tab" data-bs-toggle="tab"
+                                data-bs-target="#query" type="button">
+                            <i class="bi bi-search"></i> 综合查询
+                        </button>
+                    </li>
+                    <li class="nav-item">
                         <button class="nav-link" id="logs-tab" data-bs-toggle="tab"
                                 data-bs-target="#logs" type="button">
                             <i class="bi bi-journal-text"></i> 日志查看
@@ -204,6 +216,47 @@
                                                 <button type="button" class="btn btn-outline-success" id="btn-sell-close">
                                                     <i class="bi bi-x-circle"></i> 卖出平仓
                                                 </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <!-- 高级下单参数 -->
+                                    <div class="row mb-3">
+                                        <div class="col-md-3">
+                                            <label class="form-label">报单类型</label>
+                                            <select class="form-select form-select-sm" id="input-price-type">
+                                                <option value="limit" selected>限价单</option>
+                                                <option value="market">市价单</option>
+                                                <option value="best">最优价</option>
+                                            </select>
+                                        </div>
+                                        <div class="col-md-3">
+                                            <label class="form-label">有效期</label>
+                                            <select class="form-select form-select-sm" id="input-time-condition">
+                                                <option value="GFD" selected>当日有效(GFD)</option>
+                                                <option value="IOC">立即成交(IOC)</option>
+                                                <option value="GTC">撤销前有效(GTC)</option>
+                                            </select>
+                                        </div>
+                                        <div class="col-md-3">
+                                            <label class="form-label">成交量条件</label>
+                                            <select class="form-select form-select-sm" id="input-volume-condition">
+                                                <option value="any" selected>任意数量</option>
+                                                <option value="min">最小数量</option>
+                                                <option value="all">全部数量</option>
+                                            </select>
+                                        </div>
+                                        <div class="col-md-3">
+                                            <label class="form-label">最小成交量</label>
+                                            <input type="number" class="form-control form-control-sm" id="input-min-volume" value="1" min="1">
+                                        </div>
+                                    </div>
+                                    <div class="row mb-3">
+                                        <div class="col-md-12">
+                                            <div class="form-check">
+                                                <input class="form-check-input" type="checkbox" id="chk-skip-validation">
+                                                <label class="form-check-label" for="chk-skip-validation">
+                                                    <i class="bi bi-shield-exclamation"></i> 跳过前端校验（直接发送到CTP柜台，用于测试柜台错误返回）
+                                                </label>
                                             </div>
                                         </div>
                                     </div>
@@ -522,6 +575,58 @@
                                     </div>
                                 </div>
 
+                                <!-- CTP柜台错误测试 (测试点22-24) -->
+                                <div class="card mb-3 border-warning">
+                                    <div class="card-header bg-warning">
+                                        <i class="bi bi-server"></i> CTP柜台错误测试
+                                        <span class="badge bg-dark ms-2">测试点22-24</span>
+                                    </div>
+                                    <div class="card-body">
+                                        <p class="text-muted small">以下测试跳过前端校验，将委托直接发送到CTP柜台，获取柜台返回的错误信息。需要先登录系统。</p>
+                                        <div class="row mb-2">
+                                            <div class="col-md-4">
+                                                <label class="form-label">测试合约</label>
+                                                <input type="text" class="form-control form-control-sm" id="ctp-test-instrument" value="IF2602">
+                                            </div>
+                                        </div>
+                                        <div class="list-group">
+                                            <div class="list-group-item d-flex justify-content-between align-items-center">
+                                                <div>
+                                                    <strong>资金不足 - CTP柜台错误</strong>
+                                                    <span class="badge bg-warning ms-2">第22项</span>
+                                                    <p class="mb-0 text-muted small">发送超大手数开仓委托，触发柜台资金不足错误</p>
+                                                </div>
+                                                <div>
+                                                    <span id="test-result-22" class="badge bg-secondary me-2">待测试</span>
+                                                    <button class="btn btn-sm btn-outline-warning" id="btn-test-ctp-margin">测试</button>
+                                                </div>
+                                            </div>
+                                            <div class="list-group-item d-flex justify-content-between align-items-center">
+                                                <div>
+                                                    <strong>持仓不足 - CTP柜台错误</strong>
+                                                    <span class="badge bg-warning ms-2">第23项</span>
+                                                    <p class="mb-0 text-muted small">对无持仓合约发送平仓委托，触发柜台持仓不足错误</p>
+                                                </div>
+                                                <div>
+                                                    <span id="test-result-23" class="badge bg-secondary me-2">待测试</span>
+                                                    <button class="btn btn-sm btn-outline-warning" id="btn-test-ctp-position">测试</button>
+                                                </div>
+                                            </div>
+                                            <div class="list-group-item d-flex justify-content-between align-items-center">
+                                                <div>
+                                                    <strong>市场状态错误 - CTP柜台错误</strong>
+                                                    <span class="badge bg-warning ms-2">第24项</span>
+                                                    <p class="mb-0 text-muted small">在非交易时段发送委托，触发柜台市场状态错误</p>
+                                                </div>
+                                                <div>
+                                                    <span id="test-result-24" class="badge bg-secondary me-2">待测试</span>
+                                                    <button class="btn btn-sm btn-outline-warning" id="btn-test-ctp-market">测试</button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
                                 <!-- 错误提示显示区 -->
                                 <div class="card bg-light">
                                     <div class="card-header">错误提示信息</div>
@@ -690,6 +795,114 @@
                                                 </div>
                                             </div>
                                         </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- ==================== 行情数据页 ==================== -->
+                    <div class="tab-pane fade" id="market" role="tabpanel">
+                        <div class="card mt-3">
+                            <div class="card-header">
+                                <i class="bi bi-graph-up"></i> 行情数据
+                            </div>
+                            <div class="card-body">
+                                <!-- 行情连接状态 -->
+                                <div class="row mb-3">
+                                    <div class="col-md-6">
+                                        <label class="form-label">行情前置</label>
+                                        <input type="text" class="form-control form-control-sm" id="input-md-front"
+                                               value="tcp://124.74.247.136:21413">
+                                    </div>
+                                    <div class="col-md-3">
+                                        <label class="form-label">状态</label>
+                                        <div id="md-status" class="form-control-plaintext">
+                                            <span class="badge bg-secondary">未连接</span>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-3 d-flex align-items-end">
+                                        <button class="btn btn-primary btn-sm" id="btn-md-connect">连接行情</button>
+                                    </div>
+                                </div>
+
+                                <!-- 订阅管理 -->
+                                <div class="row mb-3">
+                                    <div class="col-md-8">
+                                        <label class="form-label">订阅合约（逗号分隔）</label>
+                                        <input type="text" class="form-control form-control-sm" id="input-subscribe-instruments"
+                                               placeholder="IF2602,IC2602,IH2602">
+                                    </div>
+                                    <div class="col-md-4 d-flex align-items-end">
+                                        <button class="btn btn-success btn-sm me-1" id="btn-subscribe">订阅</button>
+                                        <button class="btn btn-outline-secondary btn-sm" id="btn-unsubscribe">退订</button>
+                                    </div>
+                                </div>
+
+                                <!-- 行情表格 -->
+                                <div class="table-responsive">
+                                    <table class="table table-striped table-sm" id="table-market-data">
+                                        <thead>
+                                            <tr>
+                                                <th>合约</th>
+                                                <th>最新价</th>
+                                                <th>涨停价</th>
+                                                <th>跌停价</th>
+                                                <th>买一价</th>
+                                                <th>买一量</th>
+                                                <th>卖一价</th>
+                                                <th>卖一量</th>
+                                                <th>成交量</th>
+                                                <th>持仓量</th>
+                                                <th>更新时间</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="market-data-body">
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- ==================== 综合查询页 ==================== -->
+                    <div class="tab-pane fade" id="query" role="tabpanel">
+                        <div class="card mt-3">
+                            <div class="card-header">
+                                <i class="bi bi-search"></i> 综合查询
+                            </div>
+                            <div class="card-body">
+                                <div class="row mb-3">
+                                    <div class="col-md-12">
+                                        <div class="btn-group flex-wrap">
+                                            <button class="btn btn-outline-primary btn-sm" id="btn-qry-exchanges">交易所</button>
+                                            <button class="btn btn-outline-primary btn-sm" id="btn-qry-products">产品</button>
+                                            <button class="btn btn-outline-primary btn-sm" id="btn-qry-investor">投资者</button>
+                                            <button class="btn btn-outline-primary btn-sm" id="btn-qry-trading-codes">交易编码</button>
+                                            <button class="btn btn-outline-primary btn-sm" id="btn-qry-position-detail">持仓明细</button>
+                                            <button class="btn btn-outline-primary btn-sm" id="btn-qry-trades">成交记录</button>
+                                            <button class="btn btn-outline-primary btn-sm" id="btn-qry-instrument-status">合约状态</button>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="row mb-3">
+                                    <div class="col-md-4">
+                                        <label class="form-label">合约代码(可选)</label>
+                                        <input type="text" class="form-control form-control-sm" id="input-qry-instrument" placeholder="留空查全部">
+                                    </div>
+                                    <div class="col-md-4 d-flex align-items-end">
+                                        <button class="btn btn-outline-info btn-sm me-1" id="btn-qry-margin-rate">查保证金率</button>
+                                        <button class="btn btn-outline-info btn-sm me-1" id="btn-qry-commission-rate">查手续费率</button>
+                                        <button class="btn btn-outline-info btn-sm" id="btn-qry-order-comm-rate">查报单手续费</button>
+                                    </div>
+                                </div>
+
+                                <!-- 查询结果 -->
+                                <div class="card bg-light">
+                                    <div class="card-header">查询结果</div>
+                                    <div class="card-body">
+                                        <pre id="query-result" style="max-height: 400px; overflow-y: auto; font-size: 12px;">点击上方按钮查询...</pre>
                                     </div>
                                 </div>
                             </div>

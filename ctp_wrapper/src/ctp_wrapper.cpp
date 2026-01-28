@@ -534,6 +534,155 @@ public:
                 error_id, error_msg, nRequestID, bIsLast ? 1 : 0);
         }
     }
+    // ========== 扩展查询响应回调 ==========
+    virtual void OnRspQryExchange(
+        CThostFtdcExchangeField *pExchange,
+        CThostFtdcRspInfoField *pRspInfo,
+        int nRequestID, bool bIsLast) override
+    {
+        if (callbacks.on_rsp_qry_exchange) {
+            const char* exchange_id = pExchange ? pExchange->ExchangeID : "";
+            const char* exchange_name = pExchange ? pExchange->ExchangeName : "";
+            int error_id = pRspInfo ? pRspInfo->ErrorID : 0;
+            const char* error_msg = pRspInfo ? pRspInfo->ErrorMsg : "";
+
+            callbacks.on_rsp_qry_exchange(
+                exchange_id, exchange_name,
+                error_id, error_msg, nRequestID, bIsLast ? 1 : 0);
+        }
+    }
+
+    virtual void OnRspQryProduct(
+        CThostFtdcProductField *pProduct,
+        CThostFtdcRspInfoField *pRspInfo,
+        int nRequestID, bool bIsLast) override
+    {
+        if (callbacks.on_rsp_qry_product) {
+            const char* product_id = pProduct ? pProduct->ProductID : "";
+            const char* product_name = pProduct ? pProduct->ProductName : "";
+            const char* exchange_id = pProduct ? pProduct->ExchangeID : "";
+            int product_class = pProduct ? pProduct->ProductClass : 0;
+            int volume_multiple = pProduct ? pProduct->VolumeMultiple : 0;
+            double price_tick = pProduct ? pProduct->PriceTick : 0.0;
+            int error_id = pRspInfo ? pRspInfo->ErrorID : 0;
+            const char* error_msg = pRspInfo ? pRspInfo->ErrorMsg : "";
+
+            callbacks.on_rsp_qry_product(
+                product_id, product_name, exchange_id, product_class,
+                volume_multiple, price_tick,
+                error_id, error_msg, nRequestID, bIsLast ? 1 : 0);
+        }
+    }
+
+    virtual void OnRspQryInvestorPositionDetail(
+        CThostFtdcInvestorPositionDetailField *pDetail,
+        CThostFtdcRspInfoField *pRspInfo,
+        int nRequestID, bool bIsLast) override
+    {
+        if (callbacks.on_rsp_qry_investor_position_detail) {
+            const char* broker_id = pDetail ? pDetail->BrokerID : "";
+            const char* investor_id = pDetail ? pDetail->InvestorID : "";
+            const char* instrument_id = pDetail ? pDetail->InstrumentID : "";
+            const char* exchange_id = pDetail ? pDetail->ExchangeID : "";
+            char direction = pDetail ? pDetail->Direction : '0';
+            const char* open_date = pDetail ? pDetail->OpenDate : "";
+            const char* trade_id = pDetail ? pDetail->TradeID : "";
+            int volume = pDetail ? pDetail->Volume : 0;
+            double open_price = pDetail ? pDetail->OpenPrice : 0.0;
+            double margin = pDetail ? pDetail->Margin : 0.0;
+            double close_profit = pDetail ? pDetail->CloseProfitByDate : 0.0;
+            double position_profit = pDetail ? pDetail->PositionProfitByDate : 0.0;
+            const char* trading_day = pDetail ? pDetail->TradingDay : "";
+            int error_id = pRspInfo ? pRspInfo->ErrorID : 0;
+            const char* error_msg = pRspInfo ? pRspInfo->ErrorMsg : "";
+
+            callbacks.on_rsp_qry_investor_position_detail(
+                broker_id, investor_id, instrument_id, exchange_id,
+                direction, open_date, trade_id, volume,
+                open_price, margin, close_profit, position_profit,
+                trading_day,
+                error_id, error_msg, nRequestID, bIsLast ? 1 : 0);
+        }
+    }
+
+    virtual void OnRspQryInvestor(
+        CThostFtdcInvestorField *pInvestor,
+        CThostFtdcRspInfoField *pRspInfo,
+        int nRequestID, bool bIsLast) override
+    {
+        if (callbacks.on_rsp_qry_investor) {
+            const char* broker_id = pInvestor ? pInvestor->BrokerID : "";
+            const char* investor_id = pInvestor ? pInvestor->InvestorID : "";
+            const char* investor_name = pInvestor ? pInvestor->InvestorName : "";
+            const char* id_card_no = pInvestor ? pInvestor->IdentifiedCardNo : "";
+            int investor_type = pInvestor ? pInvestor->InvestorType : 0;
+            int error_id = pRspInfo ? pRspInfo->ErrorID : 0;
+            const char* error_msg = pRspInfo ? pRspInfo->ErrorMsg : "";
+
+            callbacks.on_rsp_qry_investor(
+                broker_id, investor_id, investor_name, id_card_no,
+                investor_type,
+                error_id, error_msg, nRequestID, bIsLast ? 1 : 0);
+        }
+    }
+
+    virtual void OnRspQryTradingCode(
+        CThostFtdcTradingCodeField *pTradingCode,
+        CThostFtdcRspInfoField *pRspInfo,
+        int nRequestID, bool bIsLast) override
+    {
+        if (callbacks.on_rsp_qry_trading_code) {
+            const char* broker_id = pTradingCode ? pTradingCode->BrokerID : "";
+            const char* investor_id = pTradingCode ? pTradingCode->InvestorID : "";
+            const char* exchange_id = pTradingCode ? pTradingCode->ExchangeID : "";
+            const char* client_id = pTradingCode ? pTradingCode->ClientID : "";
+            int client_id_type = pTradingCode ? pTradingCode->ClientIDType : 0;
+            int error_id = pRspInfo ? pRspInfo->ErrorID : 0;
+            const char* error_msg = pRspInfo ? pRspInfo->ErrorMsg : "";
+
+            callbacks.on_rsp_qry_trading_code(
+                broker_id, investor_id, exchange_id, client_id,
+                client_id_type,
+                error_id, error_msg, nRequestID, bIsLast ? 1 : 0);
+        }
+    }
+
+    virtual void OnRspQryInstrumentOrderCommRate(
+        CThostFtdcInstrumentOrderCommRateField *pRate,
+        CThostFtdcRspInfoField *pRspInfo,
+        int nRequestID, bool bIsLast) override
+    {
+        if (callbacks.on_rsp_qry_instrument_order_comm_rate) {
+            const char* broker_id = pRate ? pRate->BrokerID : "";
+            const char* investor_id = pRate ? pRate->InvestorID : "";
+            const char* instrument_id = pRate ? pRate->InstrumentID : "";
+            double order_comm = pRate ? pRate->OrderCommByVolume : 0.0;
+            double action_comm = pRate ? pRate->OrderActionCommByVolume : 0.0;
+            const char* exchange_id = pRate ? pRate->ExchangeID : "";
+            int error_id = pRspInfo ? pRspInfo->ErrorID : 0;
+            const char* error_msg = pRspInfo ? pRspInfo->ErrorMsg : "";
+
+            callbacks.on_rsp_qry_instrument_order_comm_rate(
+                broker_id, investor_id, instrument_id,
+                order_comm, action_comm, exchange_id,
+                error_id, error_msg, nRequestID, bIsLast ? 1 : 0);
+        }
+    }
+
+    virtual void OnRtnInstrumentStatus(
+        CThostFtdcInstrumentStatusField *pStatus) override
+    {
+        if (callbacks.on_rtn_instrument_status) {
+            const char* exchange_id = pStatus ? pStatus->ExchangeID : "";
+            const char* instrument_id = pStatus ? pStatus->InstrumentID : "";
+            int status = pStatus ? pStatus->InstrumentStatus : 0;
+            const char* enter_time = pStatus ? pStatus->EnterTime : "";
+            int enter_reason = pStatus ? pStatus->EnterReason : 0;
+
+            callbacks.on_rtn_instrument_status(
+                exchange_id, instrument_id, status, enter_time, enter_reason);
+        }
+    }
 };
 
 // ============================================================
@@ -973,6 +1122,113 @@ CTP_API int ReqQryInstrumentCommissionRate(void* api,
                 strncpy(req.InstrumentID, instrument_id, sizeof(req.InstrumentID) - 1);
             }
             return wrapper->api->ReqQryInstrumentCommissionRate(&req, request_id);
+        }
+    }
+    return -1;
+}
+
+// ============================================================
+// C 接口实现 - 扩展查询
+// ============================================================
+
+CTP_API int ReqQryExchange(void* api,
+    const char* exchange_id, int request_id)
+{
+    if (api) {
+        ApiWrapper* wrapper = static_cast<ApiWrapper*>(api);
+        if (wrapper->api) {
+            CThostFtdcQryExchangeField req = {0};
+            if (exchange_id) {
+                strncpy(req.ExchangeID, exchange_id, sizeof(req.ExchangeID) - 1);
+            }
+            return wrapper->api->ReqQryExchange(&req, request_id);
+        }
+    }
+    return -1;
+}
+
+CTP_API int ReqQryProduct(void* api,
+    const char* product_id, const char* exchange_id, int request_id)
+{
+    if (api) {
+        ApiWrapper* wrapper = static_cast<ApiWrapper*>(api);
+        if (wrapper->api) {
+            CThostFtdcQryProductField req = {0};
+            if (product_id) {
+                strncpy(req.ProductID, product_id, sizeof(req.ProductID) - 1);
+            }
+            if (exchange_id) {
+                strncpy(req.ExchangeID, exchange_id, sizeof(req.ExchangeID) - 1);
+            }
+            return wrapper->api->ReqQryProduct(&req, request_id);
+        }
+    }
+    return -1;
+}
+
+CTP_API int ReqQryInvestorPositionDetail(void* api,
+    const char* broker_id, const char* investor_id,
+    const char* instrument_id, int request_id)
+{
+    if (api) {
+        ApiWrapper* wrapper = static_cast<ApiWrapper*>(api);
+        if (wrapper->api) {
+            CThostFtdcQryInvestorPositionDetailField req = {0};
+            strncpy(req.BrokerID, broker_id, sizeof(req.BrokerID) - 1);
+            strncpy(req.InvestorID, investor_id, sizeof(req.InvestorID) - 1);
+            if (instrument_id) {
+                strncpy(req.InstrumentID, instrument_id, sizeof(req.InstrumentID) - 1);
+            }
+            return wrapper->api->ReqQryInvestorPositionDetail(&req, request_id);
+        }
+    }
+    return -1;
+}
+
+CTP_API int ReqQryInvestor(void* api,
+    const char* broker_id, const char* investor_id, int request_id)
+{
+    if (api) {
+        ApiWrapper* wrapper = static_cast<ApiWrapper*>(api);
+        if (wrapper->api) {
+            CThostFtdcQryInvestorField req = {0};
+            strncpy(req.BrokerID, broker_id, sizeof(req.BrokerID) - 1);
+            strncpy(req.InvestorID, investor_id, sizeof(req.InvestorID) - 1);
+            return wrapper->api->ReqQryInvestor(&req, request_id);
+        }
+    }
+    return -1;
+}
+
+CTP_API int ReqQryTradingCode(void* api,
+    const char* broker_id, const char* investor_id, int request_id)
+{
+    if (api) {
+        ApiWrapper* wrapper = static_cast<ApiWrapper*>(api);
+        if (wrapper->api) {
+            CThostFtdcQryTradingCodeField req = {0};
+            strncpy(req.BrokerID, broker_id, sizeof(req.BrokerID) - 1);
+            strncpy(req.InvestorID, investor_id, sizeof(req.InvestorID) - 1);
+            return wrapper->api->ReqQryTradingCode(&req, request_id);
+        }
+    }
+    return -1;
+}
+
+CTP_API int ReqQryInstrumentOrderCommRate(void* api,
+    const char* broker_id, const char* investor_id,
+    const char* instrument_id, int request_id)
+{
+    if (api) {
+        ApiWrapper* wrapper = static_cast<ApiWrapper*>(api);
+        if (wrapper->api) {
+            CThostFtdcQryInstrumentOrderCommRateField req = {0};
+            strncpy(req.BrokerID, broker_id, sizeof(req.BrokerID) - 1);
+            strncpy(req.InvestorID, investor_id, sizeof(req.InvestorID) - 1);
+            if (instrument_id) {
+                strncpy(req.InstrumentID, instrument_id, sizeof(req.InstrumentID) - 1);
+            }
+            return wrapper->api->ReqQryInstrumentOrderCommRate(&req, request_id);
         }
     }
     return -1;

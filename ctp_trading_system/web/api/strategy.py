@@ -99,20 +99,20 @@ async def start_strategy(config: StrategyConfigRequest):
     # 创建并启动策略
     strategy = _create_strategy(strategy_config)
 
-    await ws.send_log("STRATEGY", "INFO", f"🤖 正在启动策略 DEMO_AUTO...")
-    await ws.send_log("STRATEGY", "INFO", f"📋 合约={config.instrument_id}, 数量={config.volume}手")
+    await ws.send_log("STRATEGY", "INFO", f"[AUTO] 正在启动策略 DEMO_AUTO...")
+    await ws.send_log("STRATEGY", "INFO", f"[CONFIG] 合约={config.instrument_id}, 数量={config.volume}手")
 
     success = strategy.start()
 
     if success:
-        await ws.send_log("STRATEGY", "INFO", "✅ 策略启动成功")
+        await ws.send_log("STRATEGY", "INFO", "[OK] 策略启动成功")
         return StrategyResponse(
             success=True,
             message="策略启动成功",
             data=strategy.get_status()
         )
     else:
-        await ws.send_log("STRATEGY", "ERROR", "❌ 策略启动失败")
+        await ws.send_log("STRATEGY", "ERROR", "[ERROR] 策略启动失败")
         return StrategyResponse(
             success=False,
             message="策略启动失败"
@@ -134,7 +134,7 @@ async def stop_strategy():
         )
 
     strategy.stop()
-    await ws.send_log("STRATEGY", "INFO", "🛑 策略已停止")
+    await ws.send_log("STRATEGY", "INFO", "[STOP] 策略已停止")
 
     return StrategyResponse(
         success=True,
